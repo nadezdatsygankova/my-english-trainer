@@ -40,3 +40,32 @@
 .read-the-docs {
   color: #888;
 }
+
+.modal-card {
+  display: flex;
+  flex-direction: column;
+  max-height: min(90vh, 800px);
+  overflow: hidden;
+}
+
+.scroll-area {
+  flex: 1;
+  overflow: auto;
+  padding-bottom: 96px; /* space for sticky footer */
+}
+
+.modal-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.modal-grid > * {
+  min-width: 0; /* prevents overflow in grid */
+}
+
+.ff-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+

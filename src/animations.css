@@ -1,0 +1,58 @@
+/* ===== Flashcard 3D Flip & Animations ===== */
+
+/* Scene: enables 3D on iOS/desktop */
+.flip-scene {
+  perspective: 1200px;
+  perspective-origin: 50% 50%;
+  width: 100%;
+  position: relative;
+  isolation: isolate; /* avoid weird stacking contexts */
+}
+
+/* Card: rotates on Y for flip */
+.flip-card {
+  position: relative;
+  display: block;
+  transform-style: preserve-3d;
+  transition: transform 420ms cubic-bezier(.2,.7,.2,1);
+  will-change: transform;
+  min-height: 220px; /* keep a stable height */
+}
+
+/* When "show answer" is true, we flip the card */
+.flip-card.is-flipped { transform: rotateY(180deg); }
+
+/* Faces */
+.flip-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden; /* iOS */
+  transform: translateZ(0); /* avoid z-fighting */
+}
+
+.flip-face.front {
+  position: relative;
+  z-index: 2; /* front above back by default */
+}
+
+.flip-face.back {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(180deg) translateZ(0);
+  z-index: 1;
+}
+
+/* Slide-out/in wrapper (used when grading) */
+.card-anim {
+  transition: transform 320ms cubic-bezier(.2,.7,.2,1), opacity 320ms;
+  will-change: transform, opacity;
+  opacity: 1;
+  transform: none;
+}
+.card-anim.slide-left  { transform: translateX(-28%); opacity: .05; }
+.card-anim.slide-right { transform: translateX(28%);  opacity: .05;  }
+
+/* Respect reduced motion — remove animations, keep functional transforms */
+@media (prefers-reduced-motion: reduce) {
+  .flip-card { transition: none !important; } /* still flips, just instantly */
+  .card-anim { transition: none !important; }
+}
