@@ -720,6 +720,27 @@ export default function App() {
           </div>
         </div>
       )}
+ <footer style={styles.footer}>
+    <div class="container">
+      <div class="footer-content">
+        <p>&copy; 2025 Nadia Tsygankova. Made with ❤️ and lots of ☕</p>
+        <div class="footer-social">
+          <a href="https://www.nadiatsy.com/" target="_blank" aria-label="Portfolio"></a>
+            <img src="./img/icons/Portfolio.svg" alt="Portfolio" />
+          <a href="mailto:tsygankovanadia@gmail.com" target="_blank" aria-label="Email">
+            <img src="./img/icons/Mail.svg" alt="Email" />
+          </a>
+          <a href="https://www.linkedin.com/in/nadezdatsygankova/" target="_blank" aria-label="LinkedIn">
+            <img src="./img/icons/LinkedIn.svg" alt="LinkedIn" />
+          </a>
+          <a href="https://github.com/nadezdatsygankova" target="_blank" aria-label="GitHub">
+            <img src="./img/icons/github.svg" alt="GitHub" />
+          </a>
+        </div>
+      </div>
     </div>
+  </footer>
+    </div>
+
   );
 }
