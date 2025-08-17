@@ -1,8 +1,24 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './animations.css';
 import styles from './styles';
-import { todayISO, clamp, shuffle, uid, safeLower, levenshtein } from './utils';
 
+// utils
+import { todayISO, clamp, uid, safeLower, levenshtein } from './utils';
+import { scheduleCard } from './utils/scheduler';
+
+// Supabase client & cloud helpers
+import { supabase } from './supabaseClient';
+import AuthBar from './components/AuthBar';
+import {
+  loadWords,
+  upsertWord,
+  deleteWord as cloudDeleteWord,
+  insertReview,
+  pingSupabase,
+  testInsertWord,
+} from './utils/cloud';
+
+// components
 import HeaderBar from './components/HeaderBar';
 import Filters from './components/Filters';
 import Flashcard from './components/Flashcard';
@@ -12,6 +28,8 @@ import SpeakPractice from './components/SpeakPractice';
 import WordManagerModal from './components/WordManagerModal';
 import SettingsModal from './components/SettingsModal';
 import Statistics from './components/Statistics.jsx';
+import Reader from './components/Reader';
+import DebugPanel from './components/DebugPanel';
 
 // ---------- starter data ----------
 const DEFAULT_MINIMAL_PAIRS = [
@@ -66,45 +84,57 @@ const B2_PACK = [
 ];
 
 export default function App() {
+  // ---------- session (Supabase) ----------
+  const [session, setSession] = useState(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s ?? null));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
   // ---------- global state ----------
   const [progress, setProgress] = useState(() => +localStorage.getItem('progress') || 0);
 
   const [words, setWords] = useState(() => {
     const s = localStorage.getItem('words-v1');
-    const base = s
-      ? JSON.parse(s)
-      : [
-          {
-            id: uid(),
-            word: 'cold',
-            translation: 'холодный',
-            category: 'adjective',
-            difficulty: 'easy',
-            interval: 1,
-            nextReview: todayISO(),
-            createdAt: todayISO(),
-            ipa: '/koʊld/',
-            mnemonic: 'Ice cube',
-            imageUrl: '',
-            modes: { flashcard: true, spelling: true },
-          },
-          {
-            id: uid(),
-            word: 'liberty',
-            translation: 'свобода',
-            category: 'noun',
-            difficulty: 'medium',
-            interval: 1,
-            nextReview: todayISO(),
-            createdAt: todayISO(),
-            ipa: '/ˈlɪbərti/',
-            mnemonic: 'Statue of Liberty',
-            imageUrl: '',
-            modes: { flashcard: true, spelling: true },
-          },
-        ];
-    // normalize old records
-    return base.map((w) => ({ ...w, modes: w.modes ?? { flashcard: true, spelling: true } }));
+    if (s) return JSON.parse(s);
+    return [
+      {
+        id: uid(),
+        word: 'cold',
+        translation: 'холодный',
+        category: 'adjective',
+        difficulty: 'easy',
+        interval: 0,
+        ease: 2.5,
+        reps: 0,
+        lapses: 0,
+        nextReview: todayISO(),
+        createdAt: todayISO(),
+        ipa: '/koʊld/',
+        mnemonic: 'Ice cube',
+        imageUrl: '',
+        modes: { flashcard: true, spelling: true },
+      },
+      {
+        id: uid(),
+        word: 'liberty',
+        translation: 'свобода',
+        category: 'noun',
+        difficulty: 'medium',
+        interval: 0,
+        ease: 2.5,
+        reps: 0,
+        lapses: 0,
+        nextReview: todayISO(),
+        createdAt: todayISO(),
+        ipa: '/ˈlɪbərti/',
+        mnemonic: 'Statue of Liberty',
+        imageUrl: '',
+        modes: { flashcard: true, spelling: true },
+      },
+    ];
   });
 
   const [minimalPairs, setMinimalPairs] = useState(() => {
@@ -166,8 +196,13 @@ export default function App() {
   const [mpPlayed, setMpPlayed] = useState(null);
   const [mpMsg, setMpMsg] = useState(null);
 
+  // debug panel state
+  const [lastOp, setLastOp] = useState('');
+  const [lastErr, setLastErr] = useState(null);
+
+  const useCloud = !!session?.user;
+
   // ---------- derived lists ----------
-  // Flashcards use SRS and require modes.flashcard
   const dueList = useMemo(
     () => words.filter((w) => w.modes?.flashcard && (!w.nextReview || w.nextReview <= todayISO())),
     [words],
@@ -183,7 +218,6 @@ export default function App() {
   );
   const current = filteredDue[idx] ?? null;
 
-  // Spelling uses its own pool (independent) with modes.spelling
   const spellingList = useMemo(
     () =>
       words.filter(
@@ -195,14 +229,13 @@ export default function App() {
     [words, filterCat, filterDiff],
   );
 
-  // minimal pairs filtered by selected "targetSounds"
   const filteredPairs = useMemo(
     () => minimalPairs.filter((p) => targetSounds.includes(p.focus)),
     [minimalPairs, targetSounds],
   );
   const currentPair = filteredPairs.length ? filteredPairs[mpIndex % filteredPairs.length] : null;
 
-  // ---------- effects ----------
+  // ---------- persistence (local cache always updated) ----------
   useEffect(() => localStorage.setItem('words-v1', JSON.stringify(words)), [words]);
   useEffect(
     () => localStorage.setItem('minimalPairs', JSON.stringify(minimalPairs)),
@@ -218,6 +251,46 @@ export default function App() {
   useEffect(() => localStorage.setItem('pictureOnly', pictureOnly ? '1' : '0'), [pictureOnly]);
   useEffect(() => localStorage.setItem('reviewLog-v1', JSON.stringify(reviewLog)), [reviewLog]);
 
+  // ---------- CLOUD: initial load + realtime subscription ----------
+  useEffect(() => {
+    if (!useCloud) return; // stay on local-only mode
+    let channel;
+    (async () => {
+      try {
+        const remote = await loadWords();
+        setWords(remote); // cloud is source of truth
+        setLastOp(`load cloud (${remote.length})`);
+        setLastErr(null);
+
+        // Realtime (make sure Realtime is enabled for the table)
+        channel = supabase
+          .channel(`words-ch-${session.user.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'words',
+              filter: `user_id=eq.${session.user.id}`,
+            },
+            async () => {
+              const fresh = await loadWords();
+              setWords(fresh);
+              setLastOp(`realtime refresh (${fresh.length})`);
+            },
+          )
+          .subscribe();
+      } catch (e) {
+        setLastOp('cloud load error');
+        setLastErr(e?.message || e);
+        console.error('[cloud] initial load failed', e);
+      }
+    })();
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [useCloud, session?.user]);
+
   // ---------- utils ----------
   const speak = (text) => {
     try {
@@ -228,30 +301,28 @@ export default function App() {
   };
 
   // ---------- actions: words ----------
-  const addWord = () => {
-    const w = form.word.trim();
-    const t = form.translation.trim();
-    if (!w || !t) return;
-    if (isDuplicateWord(words, w)) {
-      alert('This word already exists.');
-      return;
-    }
-
+  const addWord = async () => {
+    if (!form.word.trim() || !form.translation.trim()) return;
     const entry = {
       id: uid(),
-      word: w,
-      translation: t,
+      word: form.word.trim(),
+      translation: form.translation.trim(),
       category: form.category,
       difficulty: form.difficulty,
-      interval: 1,
+      interval: 0,
+      ease: 2.5,
+      reps: 0,
+      lapses: 0,
       nextReview: todayISO(),
       createdAt: todayISO(),
       ipa: form.ipa || '',
       mnemonic: form.mnemonic || '',
       imageUrl: form.imageUrl || '',
       modes: form.modes ?? { flashcard: true, spelling: true },
+      updated_at: new Date().toISOString(),
     };
-    setWords((prev) => [entry, ...prev]);
+
+    setWords((w) => [entry, ...w]);
     setForm({
       word: '',
       translation: '',
@@ -262,11 +333,32 @@ export default function App() {
       imageUrl: '',
       modes: { flashcard: true, spelling: true },
     });
+
+    if (useCloud) {
+      setLastOp('add → cloud');
+      setLastErr(null);
+      upsertWord(session.user.id, entry)
+        .then(() => setLastOp('add saved'))
+        .catch((e) => {
+          setLastOp('add error');
+          setLastErr(e?.message || e);
+        });
+    }
   };
 
-  const delWord = (id) => {
+  const delWord = async (id) => {
     setWords((w) => w.filter((x) => x.id !== id));
     setIdx(0);
+    if (useCloud) {
+      setLastOp('delete → cloud');
+      setLastErr(null);
+      cloudDeleteWord(id)
+        .then(() => setLastOp('delete saved'))
+        .catch((e) => {
+          setLastOp('delete error');
+          setLastErr(e?.message || e);
+        });
+    }
   };
 
   const startEdit = (wordObj) => {
@@ -284,32 +376,26 @@ export default function App() {
     setShowManager(true);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editingId) return;
-    const w = form.word.trim();
-    const t = form.translation.trim();
-    if (!w || !t) return;
-    if (isDuplicateWord(words, w, editingId)) {
-      alert('This word already exists.');
-      return;
-    }
-
+    let updated;
     setWords((prev) =>
-      prev.map((x) =>
-        x.id === editingId
-          ? {
-              ...x,
-              word: w,
-              translation: t,
-              category: form.category,
-              difficulty: form.difficulty,
-              ipa: form.ipa || '',
-              mnemonic: form.mnemonic || '',
-              imageUrl: form.imageUrl || '',
-              modes: form.modes ?? { flashcard: true, spelling: true },
-            }
-          : x,
-      ),
+      prev.map((w) => {
+        if (w.id !== editingId) return w;
+        updated = {
+          ...w,
+          word: form.word.trim(),
+          translation: form.translation.trim(),
+          category: form.category,
+          difficulty: form.difficulty,
+          ipa: form.ipa || '',
+          mnemonic: form.mnemonic || '',
+          imageUrl: form.imageUrl || '',
+          modes: form.modes ?? { flashcard: true, spelling: true },
+          updated_at: new Date().toISOString(),
+        };
+        return updated;
+      }),
     );
     setEditingId(null);
     setForm({
@@ -322,6 +408,17 @@ export default function App() {
       imageUrl: '',
       modes: { flashcard: true, spelling: true },
     });
+
+    if (useCloud && updated) {
+      setLastOp('edit → cloud');
+      setLastErr(null);
+      upsertWord(session.user.id, updated)
+        .then(() => setLastOp('edit saved'))
+        .catch((e) => {
+          setLastOp('edit error');
+          setLastErr(e?.message || e);
+        });
+    }
   };
 
   const cancelEdit = () => {
@@ -338,18 +435,17 @@ export default function App() {
     });
   };
 
-  // ---------- actions: SRS grading ----------
-  const grade = (correct) => {
+  // ---------- actions: SRS grading (SM-2 style via scheduleCard) ----------
+  const grade = async (correct) => {
     if (!current) return;
-    setWords((prev) =>
-      prev.map((w) => {
-        if (w.id !== current.id) return w;
-        const nextInterval = correct ? clamp(w.interval * 2, 1, 30) : 1;
-        const d = new Date();
-        d.setDate(d.getDate() + nextInterval);
-        return { ...w, interval: nextInterval, nextReview: d.toISOString().split('T')[0] };
-      }),
-    );
+
+    const nextObj = {
+      ...current,
+      ...scheduleCard(current, !!correct),
+      updated_at: new Date().toISOString(),
+    };
+    setWords((prev) => prev.map((w) => (w.id === current.id ? nextObj : w)));
+
     setReviewLog((log) => [
       ...log,
       {
@@ -360,12 +456,32 @@ export default function App() {
         mode: 'flashcard',
       },
     ]);
+
     if (correct) setProgress((p) => clamp(p + 5, 0, 100));
+
     setShowAnswer(false);
     setSpellInput('');
     setSpellMsg(null);
     setHintTokens([]);
     setIdx((i) => (i + 1 < filteredDue.length ? i + 1 : 0));
+
+    if (useCloud) {
+      setLastOp('grade → cloud');
+      setLastErr(null);
+      Promise.all([
+        upsertWord(session.user.id, nextObj),
+        insertReview(session.user.id, {
+          word_id: nextObj.id,
+          correct: !!correct,
+          mode: 'flashcard',
+        }),
+      ])
+        .then(() => setLastOp('grade saved'))
+        .catch((e) => {
+          setLastOp('grade error');
+          setLastErr(e?.message || e);
+        });
+    }
   };
 
   // ---------- import/export: words ----------
@@ -386,7 +502,6 @@ export default function App() {
     try {
       const data = JSON.parse(text);
       if (!Array.isArray(data)) throw new Error('Not an array');
-      // looks like minimal pairs? stop here
       if (
         data.length &&
         data[0] &&
@@ -398,45 +513,60 @@ export default function App() {
         e.target.value = '';
         return;
       }
-      const normalized = data
-        .map((item) => {
-          if (typeof item === 'string') {
-            const name = item.trim();
-            if (!name) return null;
-            return {
+      const normalized = data.map((item) =>
+        typeof item === 'string'
+          ? {
               id: uid(),
-              word: name,
+              word: item,
               translation: '',
               category: 'noun',
               difficulty: 'easy',
-              interval: 1,
+              interval: 0,
+              ease: 2.5,
+              reps: 0,
+              lapses: 0,
               nextReview: todayISO(),
               createdAt: todayISO(),
               modes: { flashcard: true, spelling: true },
-            };
-          }
-          const word = (item.word || '').trim();
-          return {
-            id: uid(),
-            interval: 1,
-            nextReview: todayISO(),
-            createdAt: todayISO(),
-            category: (item.partOfSpeech || 'noun').toLowerCase(),
-            difficulty: item.difficulty || 'medium',
-            translation: item.translation ?? item.definition ?? '',
-            word,
-            example: item.example ?? '',
-            ipa: item.ipa || '',
-            mnemonic: item.mnemonic || '',
-            imageUrl: item.imageUrl || '',
-            modes: item.modes ?? { flashcard: true, spelling: true },
-          };
-        })
-        .filter(Boolean);
+              updated_at: new Date().toISOString(),
+            }
+          : {
+              id: uid(),
+              interval: 0,
+              ease: 2.5,
+              reps: 0,
+              lapses: 0,
+              nextReview: todayISO(),
+              createdAt: todayISO(),
+              category: (item.partOfSpeech || 'noun').toLowerCase(),
+              difficulty: item.difficulty || 'medium',
+              translation: item.translation ?? item.definition ?? '',
+              word: item.word ?? '',
+              example: item.example ?? '',
+              ipa: item.ipa || '',
+              mnemonic: item.mnemonic || '',
+              imageUrl: item.imageUrl || '',
+              modes: item.modes ?? { flashcard: true, spelling: true },
+              updated_at: new Date().toISOString(),
+            },
+      );
       setWords((w) => [...normalized, ...w]);
       e.target.value = '';
-    } catch {
+
+      if (useCloud) {
+        setLastOp('import → cloud');
+        setLastErr(null);
+        for (const nw of normalized) {
+          // fire-and-forget; errors will show in panel
+          upsertWord(session.user.id, nw).catch((err) => {
+            setLastOp('import error');
+            setLastErr(err?.message || err);
+          });
+        }
+      }
+    } catch (err) {
       alert('Invalid JSON. Expect an array of words or objects.');
+      console.error(err);
     }
   };
 
@@ -447,20 +577,18 @@ export default function App() {
     translation: it.definition || '',
     category: (it.partOfSpeech || 'expression').toLowerCase(),
     difficulty: 'medium',
-    interval: 1,
+    interval: 0,
+    ease: 2.5,
+    reps: 0,
+    lapses: 0,
     nextReview: todayISO(),
     createdAt: todayISO(),
     example: it.example || '',
     modes: { flashcard: true, spelling: true },
+    updated_at: new Date().toISOString(),
   });
-  const loadB2Pack = () => {
+  const loadB2Pack = async () => {
     const existing = new Set(words.map((w) => safeLower(w.word)));
-    const isDuplicateWord = (list, nextWord, excludeId = null) =>
-      list.some(
-        (w) =>
-          safeLower(w.word.trim()) === safeLower(nextWord.trim()) &&
-          (excludeId ? w.id !== excludeId : true),
-      );
     const newcomers = B2_PACK.filter((it) => it.word && !existing.has(safeLower(it.word))).map(
       mapB2,
     );
@@ -470,13 +598,23 @@ export default function App() {
     }
     setWords((w) => [...newcomers, ...w]);
     alert(`B2 pack loaded: added ${newcomers.length} words.`);
+    if (useCloud) {
+      setLastOp('B2 → cloud');
+      setLastErr(null);
+      for (const nw of newcomers) {
+        upsertWord(session.user.id, nw).catch((e) => {
+          setLastOp('B2 error');
+          setLastErr(e?.message || e);
+        });
+      }
+    }
   };
 
   // ---------- spelling helpers ----------
   const checkSpelling = () => {
     if (!current) return;
-    const target = safeLower(current.word).trim();
-    const guess = safeLower(spellInput).trim();
+    const target = (current.word || '').toLowerCase().trim();
+    const guess = (spellInput || '').toLowerCase().trim();
     if (!guess) {
       setSpellMsg({ type: 'bad', text: 'Type your answer above.' });
       setHintTokens([]);
@@ -514,9 +652,9 @@ export default function App() {
     rec.interimResults = false;
     rec.maxAlternatives = 1;
     rec.onresult = (e) => {
-      const said = safeLower(e.results[0][0].transcript).trim();
+      const said = (e.results[0][0].transcript || '').toLowerCase().trim();
       if (!current) return;
-      const target = safeLower(current.word).trim();
+      const target = (current.word || '').toLowerCase().trim();
       if (said === target) {
         alert('✅ Nice! Pronounced correctly');
         grade(true);
@@ -590,6 +728,40 @@ export default function App() {
     }
   };
 
+  // ---------- debug panel handlers ----------
+  const handlePing = async () => {
+    setLastOp('ping');
+    setLastErr(null);
+    const { error, count } = await pingSupabase();
+    if (error) setLastErr(error.message || error);
+    else setLastOp(`ping ok (rows: ${count ?? '?'})`);
+  };
+
+  const handleLoad = async () => {
+    setLastOp('load');
+    setLastErr(null);
+    try {
+      const data = await loadWords();
+      setWords(data);
+      setLastOp(`load ok (${data.length})`);
+    } catch (e) {
+      setLastErr(e.message || e);
+    }
+  };
+
+  const handleTestInsert = async () => {
+    setLastOp('insert');
+    setLastErr(null);
+    try {
+      const { data, error } = await testInsertWord(session?.user?.id || null);
+      if (error) throw error;
+      if (data?.[0]) setWords((w) => [data[0], ...w]);
+      setLastOp('insert ok');
+    } catch (e) {
+      setLastErr(e.message || e);
+    }
+  };
+
   // ---------- render ----------
   return (
     <div style={styles.viewport}>
@@ -603,6 +775,38 @@ export default function App() {
             onOpenSettings={() => setSettingsOpen(true)}
             onExportPairs={exportPairs}
             onImportPairs={onImportPairs}
+          />
+          <AuthBar session={session} />
+          {/* Reader (LingQ-style) */}
+          <Reader
+            words={words}
+            onAddWord={(entry) => {
+              const newWord = {
+                id: uid(),
+                word: (entry.word ?? entry.front ?? '').trim(),
+                translation: (entry.translation ?? entry.back ?? '').trim(),
+                category: entry.category || 'noun',
+                difficulty: entry.difficulty || 'medium',
+                ipa: entry.ipa || '',
+                mnemonic: entry.mnemonic || '',
+                imageUrl: entry.imageUrl || '',
+                modes: entry.modes ?? { flashcard: true, spelling: true },
+                interval: 0,
+                ease: 2.5,
+                reps: 0,
+                lapses: 0,
+                nextReview: todayISO(),
+                createdAt: todayISO(),
+                updated_at: new Date().toISOString(),
+              };
+              setWords((w) => [newWord, ...w]);
+              if (useCloud)
+                upsertWord(session.user.id, newWord).catch((e) => {
+                  setLastOp('reader add error');
+                  setLastErr(e?.message || e);
+                });
+            }}
+            speak={speak}
           />
 
           <main style={styles.body}>
@@ -661,12 +865,30 @@ export default function App() {
                     ...log,
                     { id: w.id, word: w.word, correct: true, date: todayISO(), mode: 'spelling' },
                   ]);
+                  if (useCloud)
+                    insertReview(session.user.id, {
+                      word_id: w.id,
+                      correct: true,
+                      mode: 'spelling',
+                    }).catch((e) => {
+                      setLastOp('spell review error');
+                      setLastErr(e?.message || e);
+                    });
                 }}
                 onIncorrect={(w) => {
                   setReviewLog((log) => [
                     ...log,
                     { id: w.id, word: w.word, correct: false, date: todayISO(), mode: 'spelling' },
                   ]);
+                  if (useCloud)
+                    insertReview(session.user.id, {
+                      word_id: w.id,
+                      correct: false,
+                      mode: 'spelling',
+                    }).catch((e) => {
+                      setLastOp('spell review error');
+                      setLastErr(e?.message || e);
+                    });
                 }}
               />
             </div>
@@ -708,6 +930,16 @@ export default function App() {
         setEnableSR={setEnableSR}
         pictureOnly={pictureOnly}
         setPictureOnly={setPictureOnly}
+      />
+
+      {/* Debug */}
+      <DebugPanel
+        session={session}
+        lastOp={lastOp}
+        lastError={lastErr}
+        onPing={handlePing}
+        onLoad={handleLoad}
+        onTestInsert={handleTestInsert}
       />
     </div>
   );
