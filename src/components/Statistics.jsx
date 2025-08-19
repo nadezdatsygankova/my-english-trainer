@@ -3,56 +3,75 @@ import React, { useMemo } from "react";
 /**
  * <Statistics words, reviewLog />
  * - words: array of vocab entries
- * - reviewLog: [{ id, word, correct: boolean, date: 'YYYY-MM-DD' }]
+ * - reviewLog: [{ id, word, correct: boolean, date: 'YYYY-MM-DD' (UTC), mode }]
  */
 export default function Statistics({ words = [], reviewLog = [] }) {
-  const stats = useMemo(() => {
-    const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
-    const dayKey = (d) => startOfDay(d).toISOString().slice(0,10);
+  // --- Helpers: force all day keys to UTC YYYY-MM-DD (match your stored r.date) ---
+  const ymdUTC = (d) => {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+  const todayKey = ymdUTC(new Date());
 
-    const todayKey = dayKey(new Date());
+  const stats = useMemo(() => {
     const byDay = new Map();
     let correctTotal = 0, total = 0;
 
+    // 1) Fold the log into byDay using r.date (already 'YYYY-MM-DD')
     for (const r of reviewLog) {
-      const k = r.date || (r.ts ? dayKey(r.ts) : todayKey);
+      const k = (r.date && r.date.length === 10) ? r.date : todayKey;
       const prev = byDay.get(k) || { total: 0, correct: 0 };
       prev.total += 1;
-      prev.correct += r.correct ? 1 : 0;
+      if (r.correct) prev.correct += 1;
       byDay.set(k, prev);
+
       total += 1;
       if (r.correct) correctTotal += 1;
     }
 
+    // 2) Build last 7 days (UTC)
     const last7 = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
-      d.setDate(d.getDate() - i);
-      const k = dayKey(d);
+      // shift by i days in UTC
+      d.setUTCDate(d.getUTCDate() - i);
+      const k = ymdUTC(d);
       const obj = byDay.get(k) || { total: 0, correct: 0 };
       last7.push({
-        day: k.slice(5),        // MM-DD
+        key: k,                                // 'YYYY-MM-DD'
+        day: k.slice(5),                       // 'MM-DD'
         total: obj.total,
         correct: obj.correct,
         acc: obj.total ? Math.round((obj.correct * 100) / obj.total) : 0,
       });
     }
 
+    // 3) Streak (UTC)
     let streak = 0;
     for (let i = 0; ; i++) {
       const d = new Date();
-      d.setDate(d.getDate() - i);
-      const k = dayKey(d);
+      d.setUTCDate(d.getUTCDate() - i);
+      const k = ymdUTC(d);
       const has = (byDay.get(k)?.total || 0) > 0;
-      if (has) streak++;
-      else break;
+      if (has) streak += 1; else break;
     }
 
+    // 4) KPIs
     const today = byDay.get(todayKey) || { total: 0, correct: 0 };
     const mastered = words.filter((w) => (w.interval || 0) >= 30).length;
-    const addedThisWeek = words.filter(
-      (w) => new Date(w.createdAt) >= new Date(Date.now() - 6 * 24 * 3600 * 1000)
-    ).length;
+
+    const sixDaysAgoUTC = new Date();
+    sixDaysAgoUTC.setUTCDate(sixDaysAgoUTC.getUTCDate() - 6);
+    const addedThisWeek = words.filter((w) => {
+      // prefer createdAt if present, else updated_at/date fields
+      const s = w.createdAt || w.created_at || w.updated_at;
+      if (!s) return false;
+      const dt = new Date(s);
+      // compare in UTC
+      return dt >= sixDaysAgoUTC;
+    }).length;
 
     return {
       todayCount: today.total,
@@ -85,7 +104,7 @@ export default function Statistics({ words = [], reviewLog = [] }) {
         <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>Last 7 Days</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", alignItems: "end", gap: 8, height: 120, padding: "6px 2px 0" }}>
           {stats.last7.map((d) => (
-            <div key={d.day} title={`${d.day} • ${d.total} reviews • ${d.acc}%`}>
+            <div key={d.key} title={`${d.key} • ${d.total} reviews • ${d.acc}%`}>
               <div style={{ display: "grid", gap: 4, justifyItems: "center" }}>
                 {/* total bar */}
                 <div
@@ -105,7 +124,9 @@ export default function Statistics({ words = [], reviewLog = [] }) {
                       bottom: 0,
                       left: 0,
                       right: 0,
-                      height: d.total ? Math.round(((d.correct || 0) / d.total) * Math.round((d.total / maxTotal) * 86)) : 0,
+                      height: d.total
+                        ? Math.round(((d.correct || 0) / d.total) * Math.round((d.total / maxTotal) * 86))
+                        : 0,
                       background: "#6366f1",
                     }}
                   />

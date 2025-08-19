@@ -105,15 +105,29 @@ export async function loadWords() {
   return (data || []).map(fromDb);
 }
 
-export async function upsertWord(userId, payload) {
-  const row = toDb(payload, userId);
-  const { data, error } = await supabase
-    .from("words")
-    .upsert(row)
-    .select()
-    .single();
+export async function upsertWord(userId, w) {
+  const row = {
+    id: w.id,
+    user_id: userId,
+    word: w.word ?? "",
+    translation: w.translation ?? "",
+    category: w.category ?? "noun",
+    difficulty: w.difficulty ?? "medium",
+    interval: w.interval ?? 0,
+    ease: w.ease ?? 2.5,
+    reps: w.reps ?? 0,
+    lapses: w.lapses ?? 0,
+    next_review: w.nextReview ?? w.next_review ?? null,
+    created_at: w.createdAt ?? w.created_at ?? new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    modes: w.modes ?? { flashcard: true, spelling: true },
+    ipa: w.ipa ?? "",
+    mnemonic: w.mnemonic ?? "",
+    image_url: w.imageUrl ?? w.image_url ?? "",
+    example: w.example ?? "",
+  };
+  const { error } = await supabase.from("words").upsert(row);
   if (error) throw error;
-  return fromDb(data);
 }
 
 export async function deleteWord(id) {

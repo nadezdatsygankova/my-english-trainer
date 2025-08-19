@@ -5,24 +5,40 @@ import { supabase } from "../supabaseClient";
 export default function AuthBar({ session }) {
   const [email, setEmail] = useState("");
 
-  const signInWithGitHub = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "github",
-      options: { redirectTo: window.location.origin },
-    });
-    if (error) console.error("GitHub sign-in error:", error);
-  };
+// wherever you call signInWithOAuth (e.g., AuthBar.jsx)
+const signInWithGitHub = async () => {
+  const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
 
-  const sendMagicLink = async (e) => {
-    e.preventDefault();
-    if (!email) return alert("Enter email");
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.origin },
-    });
-    if (error) alert(error.message);
-    else alert("Magic link sent. Check your inbox.");
-  };
+  // On GitHub Pages, the app is at /my-english-trainer
+  const redirectTo = isLocal
+    ? location.origin // http://localhost:5173
+    : `${location.origin}/my-english-trainer`; // https://nadezdatsygankova.github.io/my-english-trainer
+
+  console.log("OAuth redirectTo =>", redirectTo); // keep for debugging
+
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "github",
+    options: { redirectTo }, // <-- critical
+  });
+  if (error) console.error("GitHub sign-in error:", error);
+};
+
+const sendMagicLink = async (e) => {
+  e.preventDefault();
+  if (!email) return alert("Enter email");
+
+  const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+  const emailRedirectTo = isLocal
+    ? location.origin                         // http://localhost:5173
+    : `${location.origin}/my-english-trainer`; // https://.../my-english-trainer
+
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo },   // <-- critical
+  });
+  if (error) alert(error.message);
+  else alert("Magic link sent. Check your inbox.");
+};
 
   const signOut = async () => { await supabase.auth.signOut(); };
 

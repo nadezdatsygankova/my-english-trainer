@@ -1,5 +1,7 @@
+// src/components/Flashcard.jsx
 import React, { useEffect, useRef, useState } from "react";
 import styles from "../styles";
+import "../animations.css";
 
 export default function Flashcard({
   current,
@@ -11,6 +13,7 @@ export default function Flashcard({
 }) {
   // exit animation state
   const [slide, setSlide] = useState(""); // "", "slide-left", "slide-right"
+  const [reverse, setReverse] = useState(false); // NEW: reverse direction
   const cardRef = useRef(null);
   const animTimer = useRef(null);
 
@@ -29,6 +32,28 @@ export default function Flashcard({
     };
   }, []);
 
+  // keyboard helpers (Space = flip, R = reverse)
+  useEffect(() => {
+    const onKey = (e) => {
+      // avoid typing in inputs
+      const tag = (e.target?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        setShowAnswer((s) => !s);
+      } else if (e.key.toLowerCase() === "r") {
+        setReverse((r) => !r);
+      } else if (e.key === "ArrowLeft") {
+        handleGrade(false);
+      } else if (e.key === "ArrowRight") {
+        handleGrade(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [setShowAnswer]); // grade is stable via closure below
+
   // mobile swipe -> grade
   const touch = useRef({ x0: 0, y0: 0, dx: 0, moved: false });
   const onTouchStart = (e) => {
@@ -46,6 +71,7 @@ export default function Flashcard({
   };
 
   const handleGrade = (isCorrect) => {
+    if (!current) return;
     if (prefersReduce) {
       setShowAnswer(false);
       grade(isCorrect);
@@ -93,9 +119,35 @@ export default function Flashcard({
     );
   }
 
+  // Direction-aware fields
+  const frontMain = reverse ? (current.translation || "—") : current.word;
+  const backMain = reverse ? current.word : (current.translation || "—");
+
   return (
     <section style={styles.card}>
-      <div style={styles.h2}>Flashcards</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div style={styles.h2}>Flashcards</div>
+
+        {/* Reverse toggle */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: "#475569" }}>
+            Mode: <strong>{reverse ? "Translation → English" : "English → Translation"}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={() => setReverse((r) => !r)}
+            title="Toggle direction (R)"
+            style={{
+              ...styles.ghost,
+              padding: "6px 10px",
+              lineHeight: 1,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {reverse ? "EN ← TR" : "EN → TR"}
+          </button>
+        </div>
+      </div>
 
       {/* Slide wrapper */}
       <div
@@ -139,9 +191,10 @@ export default function Flashcard({
                 transform: "translateZ(0)",
               }}
             >
+              {/* Header row: word + meta (only show IPA for English-on-front) */}
               <div style={{ fontSize: 22, fontWeight: 700, color: "#0f172a" }}>
-                {current.word}{" "}
-                {current.ipa && (
+                {frontMain}{" "}
+                {!reverse && current.ipa && (
                   <span style={{ fontSize: 14, color: "#64748b" }}>({current.ipa})</span>
                 )}
               </div>
@@ -149,6 +202,7 @@ export default function Flashcard({
                 {current.category} • {current.difficulty}
               </div>
 
+              {/* Media / mnemonic (still useful in both modes) */}
               {pictureOnly && current.imageUrl ? (
                 <div
                   style={{
@@ -205,14 +259,18 @@ export default function Flashcard({
                     </div>
                   )}
                   <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                    <button type="button" style={styles.ghost} onClick={() => speak(current.word)}>
-                      🔊 Speak
-                    </button>
+                    {/* Only speak English side */}
+                    {!reverse && (
+                      <button type="button" style={styles.ghost} onClick={() => speak(current.word)}>
+                        🔊 Speak
+                      </button>
+                    )}
                     {!showAnswer && (
                       <button
                         type="button"
                         style={styles.primary}
                         onClick={() => setShowAnswer(true)}
+                        title="Space"
                       >
                         Show answer
                       </button>
@@ -238,14 +296,30 @@ export default function Flashcard({
                 transform: "rotateY(180deg) translateZ(0)",
               }}
             >
+              {/* Back shows the opposite side */}
               <div style={{ fontSize: 22, fontWeight: 700, color: "#0f172a" }}>
-                {current.word}
+                {backMain}
               </div>
-              <div style={{ fontSize: 18, color: "#059669", fontWeight: 700, marginTop: 8 }}>
-                {current.translation || "—"}
-              </div>
+
+              {/* If we’re revealing English on the back in reverse mode, show IPA & Speak */}
+              {reverse && (
+                <>
+                  {current.ipa && (
+                    <div style={{ fontSize: 14, color: "#64748b", marginTop: 4 }}>
+                      ({current.ipa})
+                    </div>
+                  )}
+                  <div style={{ marginTop: 8 }}>
+                    <button type="button" style={styles.ghost} onClick={() => speak(current.word)}>
+                      🔊 Speak
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* Example sentence always helpful when revealed */}
               {current.example && (
-                <div style={{ marginTop: 8, fontSize: 13, color: "#475569" }}>
+                <div style={{ marginTop: 10, fontSize: 13, color: "#475569" }}>
                   Example: {current.example}
                 </div>
               )}

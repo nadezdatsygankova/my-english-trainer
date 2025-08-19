@@ -1,46 +1,136 @@
-import React from "react";
-import styles from "../styles";
+import React from 'react';
 
-export default function SettingsModal({ open, onClose, targetSounds, setTargetSounds, enableSR, setEnableSR, pictureOnly, setPictureOnly }) {
+export default function SettingsModal({
+  open,
+  onClose,
+  targetSounds,
+  setTargetSounds,
+  enableSR,
+  setEnableSR,
+  pictureOnly,
+  setPictureOnly,
+  targetLang,
+  setTargetLang,
+  autoTranslateEnabled,
+  setAutoTranslateEnabled,
+}) {
   if (!open) return null;
-  const groups = ["ɪ vs iː","ʊ vs uː","æ vs e","r vs l","θ vs ð","k vs g","f vs v"];
+
   return (
-    <div style={styles.modalBackdrop}>
-      <div style={styles.modal} className="scale-in" role="dialog" aria-modal="true">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <div style={{ ...styles.h2, margin: 0 }}>Settings</div>
-          <button style={styles.ghost} onClick={onClose}>✕ Close</button>
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.4)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+      }}
+      onClick={onClose}>
+      <div
+        style={{
+          background: 'white',
+          borderRadius: 12,
+          padding: 24,
+          width: '420px',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+        }}
+        onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Settings</h2>
+
+        {/* Pronunciation */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Pronunciation</div>
+          <select
+            value={targetSounds}
+            onChange={(e) => setTargetSounds(e.target.value)}
+            style={{
+              padding: 10,
+              border: '1px solid #cbd5e1',
+              borderRadius: 10,
+              width: '100%',
+            }}>
+            <option value="us">American (US)</option>
+            <option value="uk">British (UK)</option>
+          </select>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Target sounds (Ear Training)</div>
-            {groups.map((s) => (
-              <label key={s} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                <input
-                  type="checkbox"
-                  checked={targetSounds.includes(s)}
-                  onChange={(e) => {
-                    setTargetSounds((prev) =>
-                      e.target.checked ? [...new Set([...prev, s])] : prev.filter(x => x !== s)
-                    );
-                  }}
-                />
-                <span>{s}</span>
-              </label>
-            ))}
-          </div>
+        {/* Voice input */}
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={enableSR}
+              onChange={(e) => setEnableSR(e.target.checked)}
+            />
+            Enable voice input (speech recognition)
+          </label>
+        </div>
 
-          <div>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>General</div>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <input type="checkbox" checked={enableSR} onChange={(e) => setEnableSR(e.target.checked)} /> Enable Speech Recognition (Chrome recommended)
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input type="checkbox" checked={pictureOnly} onChange={(e) => setPictureOnly(e.target.checked)} /> Picture-only flashcard recall (if image exists)
-            </label>
+        {/* Picture only flashcards */}
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={pictureOnly}
+              onChange={(e) => setPictureOnly(e.target.checked)}
+            />
+            Picture-only flashcards
+          </label>
+        </div>
+
+        {/* Auto-translate target */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Auto-translate target</div>
+          <select
+            value={targetLang}
+            onChange={(e) => setTargetLang(e.target.value)}
+            style={{
+              padding: 10,
+              border: '1px solid #cbd5e1',
+              borderRadius: 10,
+              width: '100%',
+            }}>
+            <option value="ru">Russian (ru)</option>
+            <option value="uk">Ukrainian (uk)</option>
+            <option value="es">Spanish (es)</option>
+            <option value="fr">French (fr)</option>
+            <option value="de">German (de)</option>
+            <option value="pl">Polish (pl)</option>
+            <option value="tr">Turkish (tr)</option>
+            <option value="ar">Arabic (ar)</option>
+            <option value="zh-CN">Chinese (zh-CN)</option>
+            <option value="ja">Japanese (ja)</option>
+          </select>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>
+            We’ll auto-fill translations with a free public API when you add a word.
           </div>
         </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <input
+            type="checkbox"
+            checked={autoTranslateEnabled}
+            onChange={(e) => setAutoTranslateEnabled(e.target.checked)}
+          />
+          Auto-translate when translation is blank
+        </label>
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          style={{
+            marginTop: 12,
+            padding: '10px 16px',
+            background: '#3b82f6',
+            color: 'white',
+            border: 'none',
+            borderRadius: 8,
+            cursor: 'pointer',
+            fontWeight: 600,
+          }}>
+          Close
+        </button>
       </div>
     </div>
   );
