@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+dist/
+.gh-pages/
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +24,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# media
+public/podcasts/**
+podcasts/**
+*.mp3
+*.wav
+*.m4a

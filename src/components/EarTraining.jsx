@@ -1,6 +1,7 @@
 import React from "react";
 import styles from "../styles";
 
+
 export default function EarTraining({ currentPair, speak, playPair, guessPair, mpMsg }) {
   return (
     <section style={styles.card}>

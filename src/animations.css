@@ -56,3 +56,8 @@
   .flip-card { transition: none !important; } /* still flips, just instantly */
   .card-anim { transition: none !important; }
 }
+
+/* Keep transcript smooth on mobile */
+@media (max-width: 640px) {
+  .podcast-transcript { scroll-padding-top: 80px; }
+}
