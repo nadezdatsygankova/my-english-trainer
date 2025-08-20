@@ -31,3 +31,7 @@ podcasts/**
 *.mp3
 *.wav
 *.m4a
+dist/
+docs/
+.gh-pages/
+
