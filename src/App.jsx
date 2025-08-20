@@ -14,7 +14,7 @@ import { bus } from './utils/bus';
 // pages
 import Home from './pages/Home.jsx';
 import Trainer from './pages/Trainer.jsx';
-import Podcasts from './pages/Podcasts.jsx';
+// import Podcasts from './pages/Podcasts.jsx';
 import ReaderPage from './pages/ReaderPage.jsx';
 import Words from './pages/Words.jsx';
 import Stats from './pages/Stats.jsx';
@@ -52,7 +52,7 @@ function Layout({ session }) {
             <NavLink to="/trainer">Trainer</NavLink>
             <NavLink to="/words">Words</NavLink>
             <NavLink to="/reader">Reader</NavLink>
-            <NavLink to="/podcasts">Podcasts</NavLink>
+            {/* <NavLink to="/podcasts">Podcasts</NavLink> */}
             <NavLink to="/stats">Statistics</NavLink>
             <NavLink to="/settings">Settings</NavLink>
           </nav>
@@ -189,7 +189,7 @@ export default function App() {
             />
           }
         />
-        <Route
+        {/* <Route
           path="podcasts"
           element={
             <Podcasts
@@ -200,7 +200,7 @@ export default function App() {
               targetLang={targetLang}
             />
           }
-        />
+        /> */}
         <Route
           path="reader"
           element={

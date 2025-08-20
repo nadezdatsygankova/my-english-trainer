@@ -3,6 +3,6 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/my-english-trainer/',
-  build: { outDir: 'docs' }   
+  base: '/my-english-trainer/',  
+  build: { outDir: 'dist' }
 })
