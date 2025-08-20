@@ -24,3 +24,10 @@ dist/
 *.njsproj
 *.sln
 *.sw?
+
+# media
+public/podcasts/**
+podcasts/**
+*.mp3
+*.wav
+*.m4a
