@@ -7,14 +7,17 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Build artifacts (we will deploy from /docs, so don't ignore docs/)
 node_modules
 dist
+dist/
 dist-ssr
 *.local
-dist/
+
+# gh-pages worktree (not used when deploying from /docs)
 .gh-pages/
 
-# Editor directories and files
+# Editor & OS
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -25,13 +28,9 @@ dist/
 *.sln
 *.sw?
 
-# media
+# Media (keep large source media out of repo)
 public/podcasts/**
 podcasts/**
 *.mp3
 *.wav
 *.m4a
-dist/
-docs/
-.gh-pages/
-
