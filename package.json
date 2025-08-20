@@ -4,10 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d docs",
     "build": "vite build",
-    "dev": "vite"
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d docs -b gh-pages"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.55.0",
