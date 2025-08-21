@@ -1,496 +1,277 @@
 // src/pages/Words.jsx
-import React, { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../supabaseClient';
-import {
-  loadWords as cloudLoadWords,
-  upsertWord as cloudUpsertWord,
-  deleteWord as cloudDeleteWord,
-} from '../utils/cloud';
-import { uid, todayISO } from '../utils';
+import React, { useEffect, useMemo, useState } from "react";
+import WordManagerModal from "../components/WordManagerModal";
+import useIsMobile from "../utils/useIsMobile";
+import { uid, todayISO, safeLower } from "../utils";
 
-const ui = {
-  wrap: { maxWidth: 1100, margin: '0 auto' },
-  head: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 12,
-    flexWrap: 'wrap',
-  },
-  h1: { fontSize: 24, fontWeight: 800, color: '#0f172a', margin: 0 },
-  tag: {
-    marginLeft: 8,
-    fontSize: 12,
-    background: '#eef2ff',
-    color: '#3730a3',
-    padding: '2px 8px',
-    borderRadius: 999,
-  },
-  tools: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
-  input: {
-    padding: '10px 12px',
-    minWidth: 240,
-    border: '1px solid #cbd5e1',
-    borderRadius: 10,
-    outline: 'none',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    background: '#fff',
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  th: {
-    textAlign: 'left',
-    fontSize: 12,
-    letterSpacing: '.02em',
-    color: '#475569',
-    background: '#f8fafc',
-    padding: '10px 8px',
-    borderBottom: '1px solid #e5e7eb',
-  },
-  td: {
-    fontSize: 14,
-    color: '#0f172a',
-    padding: '8px',
-    borderBottom: '1px solid #f1f5f9',
-    verticalAlign: 'top',
-  },
-  cellInput: {
-    width: '100%',
-    boxSizing: 'border-box',
-    padding: '8px 10px',
-    border: '1px solid #cbd5e1',
-    borderRadius: 8,
-    outline: 'none',
-  },
-  chip: {
-    padding: '2px 8px',
-    borderRadius: 999,
-    fontSize: 12,
-    background: '#f1f5f9',
-    color: '#0f172a',
-  },
-  empty: { padding: 24, textAlign: 'center', color: '#64748b' },
-  btn: {
-    padding: '10px 12px',
-    border: '1px solid #cbd5e1',
-    borderRadius: 10,
-    background: '#fff',
-    cursor: 'pointer',
-    color: '#0f172a', // ← ensure visible text
-    fontWeight: 600, // ← bolder label
-    lineHeight: 1.2,
-  },
-  btnRed: {
-    padding: '8px 10px',
-    border: '1px solid #fecaca',
-    background: '#fee2e2',
-    color: '#7f1d1d', // ← darker red text
-    borderRadius: 10,
-    cursor: 'pointer',
-    fontWeight: 600,
-    lineHeight: 1.2,
-  },
-  btnGreen: {
-    padding: '8px 10px',
-    border: '1px solid #bbf7d0',
-    background: '#dcfce7',
-    color: '#064e3b', // ← darker green text
-    borderRadius: 10,
-    cursor: 'pointer',
-    fontWeight: 600,
-    lineHeight: 1.2,
-  },
-};
+export default function Words() {
+  const isMobile = useIsMobile(768);
 
-export default function Words({ words: propWords, setWords: propSetWords, session: propSession }) {
-  // Session (if not passed from App, subscribe ourselves)
-  const [session, setSession] = useState(propSession ?? null);
-  useEffect(() => {
-    if (propSession) return;
-    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s ?? null));
-    return () => sub?.subscription?.unsubscribe?.();
-  }, [propSession]);
-
-  // Words state (use props if provided, else manage local)
-  const usingProps = !!propWords && !!propSetWords;
-  const [localWords, setLocalWords] = useState(() => {
-    if (usingProps) return [];
-    try {
-      return JSON.parse(localStorage.getItem('words-v1') || '[]');
-    } catch {
-      return [];
-    }
+  // data
+  const [words, setWords] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("words-v1") || "[]"); }
+    catch { return []; }
   });
-  const words = usingProps ? propWords : localWords;
-  const setWords = usingProps
-    ? propSetWords
-    : (fn) =>
-        setLocalWords((prev) => {
-          const next = typeof fn === 'function' ? fn(prev) : fn;
-          localStorage.setItem('words-v1', JSON.stringify(next));
-          return next;
-        });
 
-  // UI state
-  const [q, setQ] = useState('');
-  const [editingId, setEditingId] = useState(null);
-  const [draft, setDraft] = useState({});
-  const [cloudInfo, setCloudInfo] = useState({ loading: false, error: null, last: '' });
-
-  // Auto-load from cloud on sign-in
   useEffect(() => {
-    if (!session?.user) return;
-    (async () => {
-      setCloudInfo({ loading: true, error: null, last: 'loading…' });
-      try {
-        const data = await cloudLoadWords();
-        setWords(data);
-        setCloudInfo({ loading: false, error: null, last: `loaded ${data.length} from cloud` });
-      } catch (e) {
-        setCloudInfo({ loading: false, error: e?.message || String(e), last: 'load failed' });
-      }
-    })();
-  }, [session?.user]); // eslint-disable-line react-hooks/exhaustive-deps
+    localStorage.setItem("words-v1", JSON.stringify(words));
+  }, [words]);
 
-  // Filtered view
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return words;
-    return words.filter((w) => {
-      const hay = [w.word, w.translation, w.category, w.difficulty, w.ipa, w.mnemonic, w.example]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return hay.includes(needle);
-    });
-  }, [q, words]);
+  // add/edit state (reuses your modal API)
+  const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState({
+    word: "", translation: "", category: "noun", difficulty: "easy",
+    ipa: "", mnemonic: "", imageUrl: "", modes: { flashcard: true, spelling: true }
+  });
 
-  // Handlers
-  const startEdit = (row) => {
-    setEditingId(row.id);
-    setDraft({
-      word: row.word ?? '',
-      translation: row.translation ?? '',
-      category: row.category ?? 'noun',
-      difficulty: row.difficulty ?? 'medium',
-      ipa: row.ipa ?? '',
-      mnemonic: row.mnemonic ?? '',
-      imageUrl: row.image_url ?? row.imageUrl ?? '',
-      example: row.example ?? '',
-      modes: row.modes ?? { flashcard: true, spelling: true },
-    });
-  };
-  const cancelEdit = () => {
+  const startAdd = () => {
     setEditingId(null);
-    setDraft({});
+    setForm({
+      word: "", translation: "", category: "noun", difficulty: "easy",
+      ipa: "", mnemonic: "", imageUrl: "", modes: { flashcard: true, spelling: true }
+    });
+    setOpen(true);
   };
 
-  const saveEdit = async () => {
-    if (!editingId) return;
-    const updatedRow = {
-      ...words.find((w) => w.id === editingId),
-      ...draft,
-      imageUrl: draft.imageUrl, // keep camelCase in app
-      updated_at: new Date().toISOString(),
-    };
-    setWords((prev) => prev.map((w) => (w.id === editingId ? updatedRow : w)));
-    setEditingId(null);
-    setDraft({});
-
-    // Push to cloud if logged in
-    if (session?.user) {
-      try {
-        await cloudUpsertWord(session.user.id, updatedRow);
-        setCloudInfo((s) => ({ ...s, last: 'saved edit' }));
-      } catch (e) {
-        setCloudInfo({ loading: false, error: e?.message || String(e), last: 'save failed' });
-      }
-    } else {
-      // persist local
-      localStorage.setItem('words-v1', JSON.stringify((usingProps ? [] : (prev) => prev)(words)));
-    }
+  const startEdit = (w) => {
+    setEditingId(w.id);
+    setForm({
+      word: w.word || "", translation: w.translation || "", category: w.category || "noun",
+      difficulty: w.difficulty || "easy", ipa: w.ipa || "", mnemonic: w.mnemonic || "",
+      imageUrl: w.imageUrl || "", modes: w.modes ?? { flashcard: true, spelling: true }
+    });
+    setOpen(true);
   };
 
-  const addQuick = async () => {
-    const nw = {
+  const addWord = () => {
+    const word = (form.word || "").trim();
+    if (!word) return;
+    const entry = {
       id: uid(),
-      word: 'new word',
-      translation: '',
-      category: 'noun',
-      difficulty: 'easy',
-      interval: 0,
-      ease: 2.5,
-      reps: 0,
-      lapses: 0,
-      nextReview: todayISO(),
-      createdAt: todayISO(),
-      modes: { flashcard: true, spelling: true },
-      ipa: '',
-      mnemonic: '',
-      imageUrl: '',
-      example: '',
+      word,
+      translation: (form.translation || "").trim(),
+      category: form.category,
+      difficulty: form.difficulty,
+      ipa: form.ipa || "",
+      mnemonic: form.mnemonic || "",
+      imageUrl: form.imageUrl || "",
+      modes: form.modes ?? { flashcard: true, spelling: true },
+      interval: 0, ease: 2.5, reps: 0, lapses: 0,
+      nextReview: todayISO(), createdAt: todayISO(),
       updated_at: new Date().toISOString(),
     };
-    setWords((prev) => [nw, ...prev]);
-    if (session?.user) {
-      try {
-        await cloudUpsertWord(session.user.id, nw);
-        setCloudInfo((s) => ({ ...s, last: 'added' }));
-      } catch (e) {
-        setCloudInfo({ loading: false, error: e?.message || String(e), last: 'add failed' });
-      }
-    }
+    setWords((prev) => [entry, ...prev]);
+    setOpen(false);
   };
 
-  const remove = async (id) => {
-    const prev = words;
-    setWords((w) => w.filter((x) => x.id !== id));
-    if (session?.user) {
-      try {
-        await cloudDeleteWord(id);
-        setCloudInfo((s) => ({ ...s, last: 'deleted' }));
-      } catch (e) {
-        // rollback on failure
-        setWords(prev);
-        setCloudInfo({ loading: false, error: e?.message || String(e), last: 'delete failed' });
-      }
-    }
+  const onSaveEdit = () => {
+    if (!editingId) return;
+    setWords((prev) =>
+      prev.map((w) => (w.id === editingId ? {
+        ...w,
+        word: form.word.trim(),
+        translation: (form.translation || "").trim(),
+        category: form.category, difficulty: form.difficulty,
+        ipa: form.ipa || "", mnemonic: form.mnemonic || "", imageUrl: form.imageUrl || "",
+        modes: form.modes ?? { flashcard: true, spelling: true },
+        updated_at: new Date().toISOString(),
+      } : w))
+    );
+    setEditingId(null);
+    setOpen(false);
   };
 
-  const refreshCloud = async () => {
-    if (!session?.user) {
-      setCloudInfo({ loading: false, error: 'Not signed in', last: '' });
-      return;
-    }
-    setCloudInfo({ loading: true, error: null, last: 'refreshing…' });
-    try {
-      const data = await cloudLoadWords();
-      setWords(data);
-      setCloudInfo({ loading: false, error: null, last: `loaded ${data.length} from cloud` });
-    } catch (e) {
-      setCloudInfo({ loading: false, error: e?.message || String(e), last: 'refresh failed' });
-    }
+  const onCancelEdit = () => {
+    setEditingId(null);
+    setOpen(false);
   };
 
-  const exportCSV = () => {
-    const rows = [
-      [
-        'id',
-        'word',
-        'translation',
-        'category',
-        'difficulty',
-        'ipa',
-        'mnemonic',
-        'example',
-        'interval',
-        'ease',
-        'reps',
-        'lapses',
-        'nextReview',
-        'createdAt',
-      ],
-    ];
-    for (const w of filtered) {
-      rows.push([
-        w.id,
-        w.word ?? '',
-        w.translation ?? '',
-        w.category ?? '',
-        w.difficulty ?? '',
-        w.ipa ?? '',
-        (w.mnemonic ?? '').replace(/\n/g, ' '),
-        (w.example ?? '').replace(/\n/g, ' '),
-        w.interval ?? '',
-        w.ease ?? '',
-        w.reps ?? '',
-        w.lapses ?? '',
-        w.nextReview ?? w.next_review ?? '',
-        w.createdAt ?? w.created_at ?? '',
-      ]);
-    }
-    const csv = rows
-      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'words.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const delWord = (id) => setWords((prev) => prev.filter((w) => w.id !== id));
+
+  // filters + search
+  const [q, setQ] = useState("");
+  const [cat, setCat] = useState("all");
+  const [dif, setDif] = useState("all");
+
+  const cats = useMemo(() => ["all", ...Array.from(new Set(words.map(w => w.category || "noun")))], [words]);
+  const diffs = ["all", "easy", "medium", "hard"];
+
+  const filtered = useMemo(() => {
+    const qq = safeLower(q);
+    return words.filter(w => {
+      const matchText =
+        !qq ||
+        safeLower(w.word).includes(qq) ||
+        safeLower(w.translation || "").includes(qq) ||
+        safeLower(w.mnemonic || "").includes(qq);
+      const matchCat = cat === "all" || (w.category || "noun") === cat;
+      const matchDif = dif === "all" || (w.difficulty || "easy") === dif;
+      return matchText && matchCat && matchDif;
+    });
+  }, [words, q, cat, dif]);
 
   return (
-    <section style={ui.wrap}>
-      <div style={ui.head}>
-        <h1 style={ui.h1}>
-          Your Words <span style={ui.tag}>{words.length}</span>
-        </h1>
-        <div style={ui.tools}>
+    <section style={{ display: "grid", gap: 12 }}>
+      {/* Search + filters */}
+      <div style={{
+        border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, background: "#fff"
+      }}>
+        <div style={{ display: "grid", gap: 8 }}>
           <input
-            placeholder="Search word / translation / IPA / note…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            style={ui.input}
+            placeholder="Search word, translation, mnemonic…"
+            style={{
+              border: "1px solid #cbd5e1", borderRadius: 12, padding: 12, fontSize: 16
+            }}
           />
-          <button style={ui.btn} onClick={exportCSV}>
-            ⬇️ Export CSV
-          </button>
-          <button style={ui.btn} onClick={addQuick}>
-            ＋ Quick add
-          </button>
-          <button
-            style={ui.btn}
-            onClick={refreshCloud}
-            disabled={cloudInfo.loading}
-            title={session?.user ? 'Reload from Supabase' : 'Sign in to use cloud'}>
-            {cloudInfo.loading ? 'Refreshing…' : '⟳ Refresh from Cloud'}
-          </button>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <select
+              value={cat}
+              onChange={(e) => setCat(e.target.value)}
+              style={{ border: "1px solid #cbd5e1", borderRadius: 12, padding: 10, fontSize: 14 }}
+            >
+              {cats.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select
+              value={dif}
+              onChange={(e) => setDif(e.target.value)}
+              style={{ border: "1px solid #cbd5e1", borderRadius: 12, padding: 10, fontSize: 14 }}
+            >
+              {diffs.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
         </div>
       </div>
 
-      <div style={{ marginBottom: 8, fontSize: 12, color: '#475569' }}>
-        {session?.user ? 'Cloud: connected' : 'Cloud: not signed in'}
-        {cloudInfo.last ? ` • ${cloudInfo.last}` : ''}
-        {cloudInfo.error ? (
-          <span style={{ color: '#b91c1c' }}> • error: {cloudInfo.error}</span>
-        ) : null}
-      </div>
-
-      <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: 12 }}>
-        <table style={ui.table}>
-          <thead>
-            <tr>
-              <th style={ui.th}>Word</th>
-              <th style={ui.th}>Translation</th>
-              <th style={ui.th}>IPA</th>
-              <th style={ui.th}>Category</th>
-              <th style={ui.th}>Diff</th>
-              <th style={ui.th}>Example / Note</th>
-              <th style={ui.th}>SRS</th>
-              <th style={ui.th}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={8} style={ui.empty}>
-                  No words yet.
-                </td>
+      {/* List */}
+      {isMobile ? (
+        // Cards on mobile
+        <div style={{ display: "grid", gap: 10 }}>
+          {filtered.map(w => (
+            <article key={w.id} style={{
+              border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, background: "#fff",
+              display: "grid", gap: 6
+            }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, justifyContent: "space-between" }}>
+                <div style={{ fontWeight: 800, color: "#0f172a", fontSize: 18 }}>
+                  {w.word} {w.ipa && <span style={{ fontSize: 12, color: "#64748b" }}>({w.ipa})</span>}
+                </div>
+                <div style={{ fontSize: 11, color: "#475569" }}>
+                  {(w.category || "noun")} • {(w.difficulty || "easy")}
+                </div>
+              </div>
+              {w.imageUrl && (
+                <img src={w.imageUrl} alt={w.word}
+                  style={{ width: "100%", height: "auto", borderRadius: 10, maxHeight: 160, objectFit: "cover" }} />
+              )}
+              {w.translation && (
+                <div style={{ color: "#059669", fontWeight: 700 }}>{w.translation}</div>
+              )}
+              {w.mnemonic && (
+                <div style={{ fontSize: 12, color: "#334155" }}>🧠 {w.mnemonic}</div>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 6 }}>
+                <button
+                  className="wm-btn"
+                  onClick={() => startEdit(w)}
+                  style={{ height: 44, borderRadius: 12 }}
+                >
+                  Edit
+                </button>
+                <button
+                  className="wm-btn danger"
+                  onClick={() => delWord(w.id)}
+                  style={{ height: 44, borderRadius: 12 }}
+                >
+                  Delete
+                </button>
+              </div>
+            </article>
+          ))}
+          {filtered.length === 0 && (
+            <div style={{ color: "#6b7280", textAlign: "center", padding: 16 }}>
+              No words match your filters.
+            </div>
+          )}
+        </div>
+      ) : (
+        // Table on desktop
+        <div style={{ overflow: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
+            <thead>
+              <tr style={{ textAlign: "left", background: "#f8fafc" }}>
+                <th style={th}>Word</th>
+                <th style={th}>Translation</th>
+                <th style={th}>Cat</th>
+                <th style={th}>Diff</th>
+                <th style={th}>IPA</th>
+                <th style={th}>Actions</th>
               </tr>
-            ) : (
-              filtered.map((row) => {
-                const isEditing = editingId === row.id;
-                return (
-                  <tr key={row.id}>
-                    <td style={ui.td}>
-                      {isEditing ? (
-                        <input
-                          style={ui.cellInput}
-                          value={draft.word}
-                          onChange={(e) => setDraft((d) => ({ ...d, word: e.target.value }))}
-                        />
-                      ) : (
-                        <strong>{row.word}</strong>
-                      )}
-                    </td>
-                    <td style={ui.td}>
-                      {isEditing ? (
-                        <input
-                          style={ui.cellInput}
-                          value={draft.translation}
-                          onChange={(e) => setDraft((d) => ({ ...d, translation: e.target.value }))}
-                        />
-                      ) : (
-                        row.translation
-                      )}
-                    </td>
-                    <td style={ui.td}>
-                      {isEditing ? (
-                        <input
-                          style={ui.cellInput}
-                          value={draft.ipa}
-                          onChange={(e) => setDraft((d) => ({ ...d, ipa: e.target.value }))}
-                        />
-                      ) : (
-                        <span style={{ fontFamily: 'serif' }}>{row.ipa ?? ''}</span>
-                      )}
-                    </td>
-                    <td style={ui.td}>
-                      {isEditing ? (
-                        <input
-                          style={ui.cellInput}
-                          value={draft.category}
-                          onChange={(e) => setDraft((d) => ({ ...d, category: e.target.value }))}
-                        />
-                      ) : (
-                        <span style={ui.chip}>{row.category}</span>
-                      )}
-                    </td>
-                    <td style={ui.td}>
-                      {isEditing ? (
-                        <input
-                          style={ui.cellInput}
-                          value={draft.difficulty}
-                          onChange={(e) => setDraft((d) => ({ ...d, difficulty: e.target.value }))}
-                        />
-                      ) : (
-                        <span style={ui.chip}>{row.difficulty}</span>
-                      )}
-                    </td>
-                    <td style={ui.td} title={row.mnemonic || ''}>
-                      {isEditing ? (
-                        <textarea
-                          rows={2}
-                          style={{ ...ui.cellInput, resize: 'vertical' }}
-                          value={draft.example}
-                          onChange={(e) => setDraft((d) => ({ ...d, example: e.target.value }))}
-                          placeholder="Example sentence or note"
-                        />
-                      ) : (
-                        row.example || row.mnemonic || ''
-                      )}
-                    </td>
-                    <td style={ui.td}>
-                      <div style={{ fontSize: 12, color: '#475569' }}>
-                        int {row.interval ?? 0} • ease {row.ease ?? 2.5}
-                        <div>next {row.nextReview ?? row.next_review ?? '—'}</div>
-                      </div>
-                    </td>
-                    <td style={ui.td}>
-                      {!isEditing ? (
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button style={ui.btnGreen} onClick={() => startEdit(row)}>
-                            Edit
-                          </button>
-                          <button style={ui.btnRed} onClick={() => remove(row.id)}>
-                            Delete
-                          </button>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button style={ui.btnGreen} onClick={saveEdit}>
-                            Save
-                          </button>
-                          <button style={ui.btn} onClick={cancelEdit}>
-                            Cancel
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filtered.map(w => (
+                <tr key={w.id} style={{ borderBottom: "1px solid #e5e7eb" }}>
+                  <td style={td}>{w.word}</td>
+                  <td style={td}>{w.translation}</td>
+                  <td style={td}>{w.category}</td>
+                  <td style={td}>{w.difficulty}</td>
+                  <td style={td}>{w.ipa}</td>
+                  <td style={{ ...td, whiteSpace: "nowrap" }}>
+                    <button className="wm-btn" onClick={() => startEdit(w)} style={{ height: 36, marginRight: 8 }}>Edit</button>
+                    <button className="wm-btn danger" onClick={() => delWord(w.id)} style={{ height: 36 }}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filtered.length === 0 && (
+            <div style={{ color: "#6b7280", textAlign: "center", padding: 16 }}>
+              No words match your filters.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Floating Add button (mobile) or top-right button (desktop) */}
+      {isMobile ? (
+        <button
+          aria-label="Add word"
+          onClick={startAdd}
+          style={{
+            position: "fixed", right: 16, bottom: 16, zIndex: 60,
+            width: 56, height: 56, borderRadius: "50%",
+            background: "#3b82f6", color: "#fff", fontSize: 26, border: 0, boxShadow: "0 10px 20px rgba(59,130,246,.35)"
+          }}
+        >
+          ＋
+        </button>
+      ) : (
+        <div style={{ position: "sticky", bottom: 0, textAlign: "right" }}>
+          <button className="wm-btn primary" onClick={startAdd} style={{ height: 40 }}>
+            + Add word
+          </button>
+        </div>
+      )}
+
+      {/* Modal */}
+      <WordManagerModal
+        open={open}
+        onClose={() => setOpen(false)}
+        form={form}
+        setForm={setForm}
+        words={words}
+        addWord={addWord}
+        delWord={delWord}
+        editingId={editingId}
+        onStartEdit={startEdit}
+        onSaveEdit={onSaveEdit}
+        onCancelEdit={onCancelEdit}
+      />
     </section>
   );
 }
+
+const th = { padding: "10px 12px", borderBottom: "1px solid #e5e7eb", fontSize: 12, color: "#64748b" };
+const td = { padding: "10px 12px", fontSize: 14, color: "#0f172a" };
