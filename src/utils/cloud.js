@@ -175,3 +175,25 @@ export async function testInsertWord(userId) {
   if (error) throw error;
   return { data: (data || []).map(fromDb) };
 }
+
+export async function loadReviews(userId, { days = 30 } = {}) {
+  const since = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("reviews") // table: reviews
+    .select("word_id, correct, mode, created_at, words(word)") // assuming FK to words
+    .eq("user_id", userId)
+    .gte("created_at", since)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+
+  // Map to your local reviewLog shape
+  return (data || []).map(r => ({
+    id: r.word_id,
+    word: r.words?.word || "", // fallback if join missing
+    correct: !!r.correct,
+    date: (r.created_at || "").slice(0,10), // YYYY-MM-DD
+    mode: r.mode || "flashcard",
+    ts: r.created_at, // keep timestamp for dedupe if you like
+  }));
+}

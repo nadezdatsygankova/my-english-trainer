@@ -66,3 +66,60 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+/* Sticky mobile bar */
+.mob-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 50;
+  background: #ffffffcc; /* slight glass */
+  backdrop-filter: blur(6px);
+  border-top: 1px solid #e5e7eb;
+  padding: 10px 12px;
+}
+
+.mob-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.mob-btn {
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  font-weight: 700;
+}
+
+.mob-btn.primary {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #3b82f6;
+}
+
+.mob-btn.good {
+  background: #10b981;
+  color: #fff;
+  border-color: #10b981;
+}
+
+.mob-btn.bad {
+  background: #ef4444;
+  color: #fff;
+  border-color: #ef4444;
+}
+
+@media (min-width: 768px) {
+  .mob-bar { display: none; }
+}
+
+/* Make inputs comfortable on mobile (prevents iOS zoom) */
+input, button, select, textarea {
+  font-size: 16px;
+}
+
+@media (max-width: 767px) {
+  .flash-word { font-size: 24px !important; }
+  .flash-translation { font-size: 20px !important; }
+}

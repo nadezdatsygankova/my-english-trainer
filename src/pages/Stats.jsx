@@ -1,79 +1,102 @@
 // src/pages/Stats.jsx
-import React, { useEffect, useMemo, useState } from "react";
-import Statistics from "../components/Statistics.jsx";
+import React, { useEffect, useMemo, useState } from 'react';
+import Statistics from '../components/Statistics.jsx';
+import { getReviewLog } from '../utils/reviews.js';
+import { bus } from '../utils/bus.js';
+import { supabase } from '../supabaseClient';
+import { loadReviews } from '../utils/cloud';
 
-const KEY = "reviewLog-v1";
-
-function safeLoad() {
-  try { return JSON.parse(localStorage.getItem(KEY) || "[]"); }
-  catch { return []; }
+function dedupeByKey(arr, keyFn) {
+  const map = new Map();
+  for (const it of arr) {
+    map.set(keyFn(it), it);
+  }
+  return Array.from(map.values()).sort((a, b) => ((a.ts || a.date) > (b.ts || b.date) ? 1 : -1));
 }
 
-export default function Stats() {
-  const [reviewLog, setReviewLog] = useState(() => safeLoad());
-  const [words, setWords] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("words-v1") || "[]"); }
-    catch { return []; }
-  });
+export default function StatsPage() {
+  const [session, setSession] = useState(null);
+  const [localLog, setLocalLog] = useState(() => getReviewLog());
+  const [cloudLog, setCloudLog] = useState([]);
 
+  // Auth
   useEffect(() => {
-    const onStorage = (e) => {
-      if (e && e.key && e.key !== KEY) return;
-      setReviewLog(safeLoad());
-      try { setWords(JSON.parse(localStorage.getItem("words-v1") || "[]")); } catch {}
-    };
-
-    // Cross-tab updates
-    window.addEventListener("storage", onStorage);
-    // Same-tab updates (our custom event)
-    const onCustom = () => onStorage({ key: KEY });
-    window.addEventListener("reviewLogUpdated", onCustom);
-
-    // Initial sync in case something wrote before this mounted
-    onStorage({ key: KEY });
-
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener("reviewLogUpdated", onCustom);
-    };
+    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s ?? null));
+    return () => sub?.subscription?.unsubscribe?.();
   }, []);
 
-  // Debug slice
-  const last5 = useMemo(() => reviewLog.slice(-5).reverse(), [reviewLog]);
+  // Load cloud when logged in
+  useEffect(() => {
+    if (!session?.user) {
+      setCloudLog([]);
+      return;
+    }
+    loadReviews(session.user.id, { days: 60 })
+      .then(setCloudLog)
+      .catch(() => setCloudLog([]));
+  }, [session?.user]);
+
+  // Live local updates (when Trainer appends)
+  useEffect(() => {
+    const onChange = () => setLocalLog(getReviewLog());
+    bus.addEventListener('review-log-changed', onChange);
+    return () => bus.removeEventListener('review-log-changed', onChange);
+  }, []);
+
+  // Midnight rollover check
+  useEffect(() => {
+    const t = setInterval(() => setLocalLog(getReviewLog()), 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Merge cloud + local (prefer cloud if same (date+id+mode))
+  const mergedLog = useMemo(() => {
+    const key = (r) => `${r.date}|${r.id}|${r.mode}`;
+    return dedupeByKey([...(cloudLog || []), ...(localLog || [])], key);
+  }, [cloudLog, localLog]);
+
+  const [words, setWords] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('words-v1') || '[]');
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    const onChange = () => {
+      try {
+        setWords(JSON.parse(localStorage.getItem('words-v1') || '[]'));
+      } catch {}
+    };
+    bus.addEventListener('words-changed', onChange);
+    return () => bus.removeEventListener('words-changed', onChange);
+  }, []);
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <h1 style={{ margin: 0 }}>Statistics</h1>
-
-      <div style={{
-        padding: 12, border: "1px solid #eef2f7", borderRadius: 12, background: "#fff",
-        boxShadow: "0 4px 14px rgba(15,23,42,.04)"
-      }}>
-        <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: 8 }}>
-          Summary
-        </div>
-        {/* Your existing KPIs + chart via the component */}
-        <Statistics words={words} reviewLog={reviewLog} />
+    <section style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h2 style={{ margin: 0 }}>Statistics</h2>
+        <button
+          type="button"
+          onClick={() => {
+            setLocalLog(getReviewLog());
+            if (session?.user)
+              loadReviews(session.user.id, { days: 60 })
+                .then(setCloudLog)
+                .catch(() => {});
+          }}
+          style={{
+            padding: '8px 12px',
+            borderRadius: 10,
+            border: '1px solid #cbd5e1',
+            background: '#fff',
+          }}>
+          ↻ Refresh
+        </button>
       </div>
 
-      <div style={{
-        padding: 12, border: "1px solid #eef2f7", borderRadius: 12, background: "#fff"
-      }}>
-        <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>
-          Debug: last 5 reviews (newest first)
-        </div>
-        {last5.length === 0 ? (
-          <div style={{ color: "#64748b" }}>No reviews yet. Go to Trainer and grade a card or try Spelling.</div>
-        ) : (
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {last5.map((r, i) => (
-              <li key={i} style={{ fontSize: 13, color: "#334155" }}>
-                {r.date} — <strong>{r.word}</strong> • {r.mode} • {r.correct ? "✅" : "❌"}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
+      <Statistics words={words} reviewLog={mergedLog} />
+    </section>
   );
 }

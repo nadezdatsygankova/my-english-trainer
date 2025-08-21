@@ -1,27 +1,38 @@
 // src/utils/reviews.js
-export function todayISO() {
-  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+// LocalStorage key
+const KEY = "review-log-v1";
+
+/**
+ * Append a new review entry to localStorage.
+ * Entry shape: { id, word, correct, date, mode }
+ */
+export function appendReview(entry) {
+  try {
+    const arr = JSON.parse(localStorage.getItem(KEY) || "[]");
+    arr.push({ ...entry });
+    localStorage.setItem(KEY, JSON.stringify(arr));
+  } catch (e) {
+    console.warn("appendReview failed", e);
+  }
+  return entry;
 }
 
 /**
- * Append a review entry and notify listeners.
- * entry: { id, word, correct: boolean, mode: 'flashcard'|'spelling', date?: 'YYYY-MM-DD' }
+ * Get the entire review log from localStorage.
+ * @returns {Array<{id, word, correct:boolean, date:string, mode:string}>}
  */
-export function appendReview(entry) {
-  const key = "reviewLog-v1";
-  let arr = [];
-  try { arr = JSON.parse(localStorage.getItem(key) || "[]"); } catch {}
-
-  const withDate = { ...entry, date: entry.date || todayISO() };
-  arr.push(withDate);
-
-  const newValue = JSON.stringify(arr);
-  localStorage.setItem(key, newValue);
-
-  // Notify other parts of the app (same-tab + cross-tab)
+export function getReviewLog() {
   try {
-    // Cross-tab: storage event fires automatically in other tabs
-    // Same-tab: fire a custom event so listeners refresh immediately
-    window.dispatchEvent(new CustomEvent("reviewLogUpdated", { detail: withDate }));
-  } catch { /* no-op */ }
+    return JSON.parse(localStorage.getItem(KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Clear the review log (for debugging or reset).
+ */
+export function clearReviewLog() {
+  localStorage.removeItem(KEY);
 }
