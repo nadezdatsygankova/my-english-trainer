@@ -238,14 +238,44 @@ export default function Words() {
       {isMobile ? (
         <button
           aria-label="Add word"
-          onClick={startAdd}
+          onClick={startAdd} 
           style={{
-            position: "fixed", right: 16, bottom: 16, zIndex: 60,
-            width: 56, height: 56, borderRadius: "50%",
-            background: "#3b82f6", color: "#fff", fontSize: 26, border: 0, boxShadow: "0 10px 20px rgba(59,130,246,.35)"
+            position: "fixed",
+            right: 16,
+            bottom: 16,
+            zIndex: 60,
+            width: 56,
+            height: 56,
+            borderRadius: "50%",
+            background: "#3b82f6",
+            color: "#fff",
+            border: 0,
+            boxShadow: "0 10px 20px rgba(59,130,246,.35)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            lineHeight: 1,
+            touchAction: "manipulation",
           }}
+          onMouseDown={(e) => (e.currentTarget.style.transform = "translateY(1px)")}
+          onMouseUp={(e) => (e.currentTarget.style.transform = "translateY(0)")}
         >
-          ＋
+          {/* SVG plus icon */}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="28"
+            height="28"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
         </button>
       ) : (
         <div style={{ position: "sticky", bottom: 0, textAlign: "right" }}>
