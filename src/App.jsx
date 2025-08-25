@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { NavLink, Outlet, Route, Routes } from 'react-router-dom';
 // supabase + auth
-import { supabase } from './supabaseClient';
+import { supabase } from './utils/supabaseClient';
 import AuthBar from './components/AuthBar';
 
 // utils
