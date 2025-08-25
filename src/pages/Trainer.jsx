@@ -8,6 +8,7 @@ import { todayISO, clamp } from '../utils';
 import { scheduleCard, scheduleCard4 } from '../utils/scheduler';
 import { appendReview } from '../utils/reviews';
 import useIsMobile from '../utils/useIsMobile';
+import ReviewSummary from '../components/ReviewSummary';
 
 const DEFAULT_MINIMAL_PAIRS = [
   { a: 'ship', b: 'sheep', ipa: '/ʃɪp/ vs /ʃiːp/', focus: 'ɪ vs iː' },
@@ -185,17 +186,19 @@ export default function Trainer() {
 
   return (
     <section style={{ display: 'grid', gap: isMobile ? 12 : 16 }}>
-      {/* Progress */}
-      <div style={sectionStyle}>
-        <h2 style={{ marginTop: 0, fontSize: isMobile ? 18 : 20 }}>Progress</h2>
-        <div style={{ background: '#e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
-          <div style={{ width: `${progress}%`, background: '#3b82f6', height: 8 }} />
+      <section style={{ display: 'grid', gap: 16 }}>
+        <ReviewSummary />
+        {/* Progress */}
+        <div style={sectionStyle}>
+          <h2 style={{ marginTop: 0, fontSize: isMobile ? 18 : 20 }}>Progress</h2>
+          <div style={{ background: '#e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ width: `${progress}%`, background: '#3b82f6', height: 8 }} />
+          </div>
+          <div style={{ fontSize: 12, color: '#475569', marginTop: 6 }}>
+            {progress}% complete • {filteredDue.length} due (filtered) / {words.length} total
+          </div>
         </div>
-        <div style={{ fontSize: 12, color: '#475569', marginTop: 6 }}>
-          {progress}% complete • {filteredDue.length} due (filtered) / {words.length} total
-        </div>
-      </div>
-
+      </section>
       {/* Filters (collapse visually on mobile) */}
       <div style={sectionStyle}>
         <h2 style={{ marginTop: 0, fontSize: isMobile ? 18 : 20 }}>Filters</h2>
@@ -223,6 +226,7 @@ export default function Trainer() {
         />
         Picture-only cards
       </label>
+
       <div style={sectionStyle}>
         <Flashcard
           current={current}
