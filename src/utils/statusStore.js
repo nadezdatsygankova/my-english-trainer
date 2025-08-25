@@ -7,7 +7,11 @@ function load(key, fallback) {
 }
 
 function save(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    console.warn("Failed to persist data", err);
+  }
 }
 
 export function getStatuses() {
