@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../utils/supabaseClient";
 import { loadWords as cloudLoadWords } from "../utils/cloud"; // you already have this
 
 // same YYYY-MM-DD helper used elsewhere
