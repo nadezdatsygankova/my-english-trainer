@@ -1,6 +1,6 @@
 // src/components/AuthBar.jsx
 import React, { useState } from "react";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../utils/supabaseClient";
 
 export default function AuthBar({ session }) {
   const [email, setEmail] = useState("");
