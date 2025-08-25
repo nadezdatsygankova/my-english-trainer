@@ -9,6 +9,7 @@ import { scheduleCard, scheduleCard4 } from '../utils/scheduler';
 import { appendReview } from '../utils/reviews';
 import useIsMobile from '../utils/useIsMobile';
 import ReviewSummary from '../components/ReviewSummary';
+import { getAnkiCounts, bumpDailyShown, resetDailyCounters } from '../utils/ankiCounts';
 
 const DEFAULT_MINIMAL_PAIRS = [
   { a: 'ship', b: 'sheep', ipa: '/ʃɪp/ vs /ʃiːp/', focus: 'ɪ vs iː' },
@@ -44,6 +45,14 @@ export default function Trainer() {
   useEffect(() => {
     localStorage.setItem('pictureOnly', pictureOnly ? '1' : '0');
   }, [pictureOnly]);
+
+  const counts = useMemo(() => {
+    return getAnkiCounts(words, {
+      maxReviewsPerDay: 200, // or from Settings
+      newCardsPerDay: 20, // or from Settings
+      filters: { category: filterCat, difficulty: filterDiff },
+    });
+  }, [words, filterCat, filterDiff]);
 
   const dueList = useMemo(
     () => words.filter((w) => w.modes?.flashcard && (!w.nextReview || w.nextReview <= todayISO())),
@@ -208,6 +217,32 @@ export default function Trainer() {
           filterDiff={filterDiff}
           setFilterDiff={setFilterDiff}
         />
+      </div>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+        <strong>Deck summary (Anki-style)</strong>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))',
+            gap: 8,
+            marginTop: 8,
+          }}>
+          <div>
+            All words: <b>{counts.totals.all}</b>
+          </div>
+          <div>
+            Due (raw): <b>{counts.totals.dueAll}</b>
+          </div>
+          <div>
+            Reviews today: <b>{counts.today.reviewsDueToday}</b> / {counts.today.reviewsCap}
+          </div>
+          <div>
+            Backlog: <b>{counts.today.reviewBacklog}</b>
+          </div>
+          <div>
+            New today: <b>{counts.today.newToday}</b> / {counts.today.newCap}
+          </div>
+        </div>
       </div>
 
       {/* Flashcards */}
