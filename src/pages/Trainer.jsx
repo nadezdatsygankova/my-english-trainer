@@ -10,6 +10,7 @@ import { appendReview } from '../utils/reviews';
 import useIsMobile from '../utils/useIsMobile';
 import ReviewSummary from '../components/ReviewSummary';
 import { getAnkiCounts, bumpDailyShown, resetDailyCounters } from '../utils/ankiCounts';
+import { bus } from '../utils/bus';
 
 const DEFAULT_MINIMAL_PAIRS = [
   { a: 'ship', b: 'sheep', ipa: '/ʃɪp/ vs /ʃiːp/', focus: 'ɪ vs iː' },
@@ -25,7 +26,19 @@ const DEFAULT_MINIMAL_PAIRS = [
 
 export default function Trainer() {
   const isMobile = useIsMobile(768);
-
+  const TRAINER_UI_KEY = 'trainer-ui-v1';
+  const readTrainerUI = () => {
+    try {
+      return JSON.parse(localStorage.getItem(TRAINER_UI_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  };
+  const writeTrainerUI = (ui) => {
+    try {
+      localStorage.setItem(TRAINER_UI_KEY, JSON.stringify(ui));
+    } catch {}
+  };
   // Words + progress
   const [words, setWords] = useState(() => {
     try {
@@ -37,10 +50,12 @@ export default function Trainer() {
   const [progress, setProgress] = useState(() => +localStorage.getItem('progress') || 0);
 
   // Flashcards filters
-  const [filterCat, setFilterCat] = useState('all');
-  const [filterDiff, setFilterDiff] = useState('all');
-  const [showAnswer, setShowAnswer] = useState(false);
-  const [idx, setIdx] = useState(0);
+  // filters + flashcard UI
+  const initUI = readTrainerUI();
+  const [filterCat, setFilterCat] = useState(initUI.filterCat ?? 'all');
+  const [filterDiff, setFilterDiff] = useState(initUI.filterDiff ?? 'all');
+  const [showAnswer, setShowAnswer] = useState(initUI.showAnswer ?? false);
+  const [idx, setIdx] = useState(initUI.idx ?? 0);
   const [pictureOnly, setPictureOnly] = useState(() => localStorage.getItem('pictureOnly') === '1');
   useEffect(() => {
     localStorage.setItem('pictureOnly', pictureOnly ? '1' : '0');
@@ -68,7 +83,15 @@ export default function Trainer() {
     [dueList, filterCat, filterDiff],
   );
   const current = filteredDue[idx] ?? null;
+  // keep UI in localStorage so route changes don’t reset it
+  useEffect(() => {
+    writeTrainerUI({ filterCat, filterDiff, showAnswer, idx });
+  }, [filterCat, filterDiff, showAnswer, idx]);
 
+  // if the due pool size changes (import/delete/sync), clamp the index safely
+  useEffect(() => {
+    setIdx((i) => (i < 0 ? 0 : Math.min(i, Math.max(0, filteredDue.length - 1))));
+  }, [filteredDue.length]);
   // Grade flashcards
   const speak = (text) => {
     try {
@@ -80,21 +103,33 @@ export default function Trainer() {
 
   const grade = (correct) => {
     if (!current) return;
+
     const nextObj = {
       ...current,
-      ...scheduleCard(current, !!correct),
+      ...scheduleCard(current, !!correct), // or scheduleCard4 if you use 4-grade
       updated_at: new Date().toISOString(),
     };
+
     setWords((prev) => prev.map((w) => (w.id === current.id ? nextObj : w)));
     if (correct) setProgress((p) => clamp(p + 5, 0, 100));
     setShowAnswer(false);
     setIdx((i) => (i + 1 < filteredDue.length ? i + 1 : 0));
-    appendReview({
+
+    const entry = {
       id: current.id,
       word: current.word,
       correct: !!correct,
       mode: 'flashcard',
-    });
+      date: todayISO(),
+    };
+    appendReview(entry);
+
+    // 🔔 Tell Stats that a review happened
+    bus.dispatchEvent(
+      new CustomEvent('review-log-changed', {
+        detail: { entry, source: 'flashcard' },
+      }),
+    );
   };
 
   // Minimal pairs
@@ -308,26 +343,40 @@ export default function Trainer() {
         <h2 style={{ marginTop: 0, fontSize: isMobile ? 18 : 20 }}>Spelling Practice</h2>
         <SpellingGame
           words={spellingList}
-          onCorrect={(w) =>
-            appendReview({
+          onCorrect={(w) => {
+            const entry = {
               id: w.id,
               word: w.word,
               correct: true,
               date: todayISO(),
               mode: 'spelling',
-            })
-          }
-          onIncorrect={(w) =>
-            appendReview({
+            };
+            appendReview(entry);
+
+            // 🔔 Notify Stats
+            bus.dispatchEvent(
+              new CustomEvent('review-log-changed', {
+                detail: { entry, source: 'spelling' },
+              }),
+            );
+          }}
+          onIncorrect={(w) => {
+            const entry = {
               id: w.id,
               word: w.word,
               correct: false,
               date: todayISO(),
               mode: 'spelling',
-            })
-          }
-          // nice mobile typing experience:
-          inputProps={{ inputMode: 'latin', autoCapitalize: 'off', autoCorrect: 'off' }}
+            };
+            appendReview(entry);
+
+            // 🔔 Notify Stats
+            bus.dispatchEvent(
+              new CustomEvent('review-log-changed', {
+                detail: { entry, source: 'spelling' },
+              }),
+            );
+          }}
         />
       </div>
 

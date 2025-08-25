@@ -3,30 +3,35 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Statistics from '../components/Statistics.jsx';
 import { getReviewLog } from '../utils/reviews.js';
 import { bus } from '../utils/bus.js';
-import { supabase } from '../utils/supabaseClient';
+import { supabase } from '../utils/supabaseClient'; // keep your path if this works for you
 import { loadReviews } from '../utils/cloud';
 
 function dedupeByKey(arr, keyFn) {
   const map = new Map();
-  for (const it of arr) {
-    map.set(keyFn(it), it);
-  }
-  return Array.from(map.values()).sort((a, b) => ((a.ts || a.date) > (b.ts || b.date) ? 1 : -1));
+  for (const it of arr) map.set(keyFn(it), it);
+  // stable-ish sort by ts/date ascending
+  return Array.from(map.values()).sort((a, b) => {
+    const aa = a.ts || a.date || '';
+    const bb = b.ts || b.date || '';
+    return aa < bb ? -1 : aa > bb ? 1 : 0;
+  });
 }
 
 export default function StatsPage() {
   const [session, setSession] = useState(null);
+
+  // --- review logs: local + cloud ---
   const [localLog, setLocalLog] = useState(() => getReviewLog());
   const [cloudLog, setCloudLog] = useState([]);
 
-  // Auth
+  // auth
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s ?? null));
     return () => sub?.subscription?.unsubscribe?.();
   }, []);
 
-  // Load cloud when logged in
+  // load cloud on login / change
   useEffect(() => {
     if (!session?.user) {
       setCloudLog([]);
@@ -37,41 +42,73 @@ export default function StatsPage() {
       .catch(() => setCloudLog([]));
   }, [session?.user]);
 
-  // Live local updates (when Trainer appends)
+  // live updates from Trainer / Spelling
   useEffect(() => {
-    const onChange = () => setLocalLog(getReviewLog());
-    bus.addEventListener('review-log-changed', onChange);
-    return () => bus.removeEventListener('review-log-changed', onChange);
+    const refreshLocal = () => setLocalLog(getReviewLog());
+    bus.addEventListener('review-log-changed', refreshLocal);
+    return () => bus.removeEventListener('review-log-changed', refreshLocal);
   }, []);
 
-  // Midnight rollover check
+  // refresh on tab focus and cross-tab storage changes
+  useEffect(() => {
+    const refreshAll = () => {
+      setLocalLog(getReviewLog());
+      try { setWords(JSON.parse(localStorage.getItem('words-v1') || '[]')); } catch {}
+    };
+    const onVis = () => { if (document.visibilityState === 'visible') refreshAll(); };
+    const onStorage = (e) => {
+      if (e.key === 'reviewLog-v1' || e.key === 'words-v1') refreshAll();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
+  // midnight rollover timer
   useEffect(() => {
     const t = setInterval(() => setLocalLog(getReviewLog()), 60 * 1000);
     return () => clearInterval(t);
   }, []);
 
-  // Merge cloud + local (prefer cloud if same (date+id+mode))
+  // merge cloud+local (prefer cloud on same date|id|mode)
   const mergedLog = useMemo(() => {
     const key = (r) => `${r.date}|${r.id}|${r.mode}`;
     return dedupeByKey([...(cloudLog || []), ...(localLog || [])], key);
   }, [cloudLog, localLog]);
 
+  // --- words (for counts/mastered/upcoming) ---
   const [words, setWords] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('words-v1') || '[]');
-    } catch {
-      return [];
-    }
+    try { return JSON.parse(localStorage.getItem('words-v1') || '[]'); }
+    catch { return []; }
   });
+
   useEffect(() => {
     const onChange = () => {
-      try {
-        setWords(JSON.parse(localStorage.getItem('words-v1') || '[]'));
-      } catch {}
+      try { setWords(JSON.parse(localStorage.getItem('words-v1') || '[]')); }
+      catch {}
     };
+    // listen to BOTH names to be safe
+    bus.addEventListener('words-updated', onChange);
     bus.addEventListener('words-changed', onChange);
-    return () => bus.removeEventListener('words-changed', onChange);
+    return () => {
+      bus.removeEventListener('words-updated', onChange);
+      bus.removeEventListener('words-changed', onChange);
+    };
   }, []);
+
+  const manualRefresh = async () => {
+    setLocalLog(getReviewLog());
+    try { setWords(JSON.parse(localStorage.getItem('words-v1') || '[]')); } catch {}
+    if (session?.user) {
+      try {
+        const cloud = await loadReviews(session.user.id, { days: 60 });
+        setCloudLog(cloud);
+      } catch {}
+    }
+  };
 
   return (
     <section style={{ display: 'grid', gap: 16 }}>
@@ -79,13 +116,7 @@ export default function StatsPage() {
         <h2 style={{ margin: 0 }}>Statistics</h2>
         <button
           type="button"
-          onClick={() => {
-            setLocalLog(getReviewLog());
-            if (session?.user)
-              loadReviews(session.user.id, { days: 60 })
-                .then(setCloudLog)
-                .catch(() => {});
-          }}
+          onClick={manualRefresh}
           style={{
             padding: '8px 12px',
             borderRadius: 10,

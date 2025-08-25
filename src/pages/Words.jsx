@@ -4,6 +4,7 @@ import WordManagerModal from '../components/WordManagerModal';
 import useIsMobile from '../utils/useIsMobile';
 import { uid, todayISO, safeLower } from '../utils';
 import { autoTranslate } from '../utils/translator';
+import { bus } from '../utils/bus';
 
 // Cloud
 import { supabase } from '../utils/supabaseClient';
@@ -12,39 +13,33 @@ import { loadWords, upsertWord, deleteWord as cloudDeleteWord } from '../utils/c
 export default function Words() {
   const isMobile = useIsMobile(768);
 
-  // -------- Auth session ----------
+  // ---------- Auth ----------
   const [session, setSession] = useState(null);
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s ?? null));
-    return () => sub.subscription.unsubscribe();
+    return () => sub?.subscription?.unsubscribe?.();
   }, []);
-
   const useCloud = !!session?.user;
 
-  // Settings (persisted by Settings page)
-  const [targetLang] = useState(() => localStorage.getItem('targetLang') || 'ru');
-  const [autoTranslateEnabled] = useState(
+  // ---------- Settings (live) ----------
+  const [targetLang, setTargetLang] = useState(() => localStorage.getItem('targetLang') || 'ru');
+  const [autoTranslateEnabled, setAutoTranslateEnabled] = useState(
     () => localStorage.getItem('autoTranslateEnabled') === '1',
   );
 
-  // Optional: react to settings changed elsewhere (e.g., user opened Settings page in another tab)
   useEffect(() => {
     const onStorage = (e) => {
-      if (e.key === 'targetLang' || e.key === 'autoTranslateEnabled') {
-        // force a re-read by updating state
-        if (e.key === 'targetLang') {
-          // eslint-disable-next-line no-restricted-globals
-          location.reload(); // simplest way; or keep separate setters if you prefer live update
-        }
+      if (e.key === 'targetLang') setTargetLang(localStorage.getItem('targetLang') || 'ru');
+      if (e.key === 'autoTranslateEnabled') {
+        setAutoTranslateEnabled(localStorage.getItem('autoTranslateEnabled') === '1');
       }
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  // -------- Data ----------
-  // Start from local cache for instant paint
+  // ---------- Data ----------
   const [words, setWords] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('words-v1') || '[]');
@@ -53,12 +48,12 @@ export default function Words() {
     }
   });
 
-  // Persist any local changes (also keeps offline)
+  // persist locally
   useEffect(() => {
     localStorage.setItem('words-v1', JSON.stringify(words));
   }, [words]);
 
-  // If signed in → replace with cloud as source of truth
+  // cloud load (source of truth) if signed in
   useEffect(() => {
     if (!useCloud) return;
     (async () => {
@@ -71,7 +66,7 @@ export default function Words() {
     })();
   }, [useCloud]);
 
-  // (Optional) Realtime sync if you enabled it on the table
+  // realtime cloud (optional)
   useEffect(() => {
     if (!useCloud) return;
     const ch = supabase
@@ -83,6 +78,11 @@ export default function Words() {
           try {
             const fresh = await loadWords();
             setWords(fresh);
+            queueMicrotask(() =>
+              bus.dispatchEvent(
+                new CustomEvent('words-updated', { detail: { size: fresh.length } }),
+              ),
+            );
           } catch {}
         },
       )
@@ -94,7 +94,7 @@ export default function Words() {
     };
   }, [useCloud, session?.user?.id]);
 
-  // -------- Add/Edit modal state ----------
+  // ---------- Add/Edit modal ----------
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
@@ -143,8 +143,6 @@ export default function Words() {
     if (!word) return;
 
     let translation = (form.translation || '').trim();
-
-    // Auto-translate if enabled and user left translation blank
     if (autoTranslateEnabled && !translation) {
       try {
         translation = await autoTranslate(word, { from: 'en', to: targetLang });
@@ -172,7 +170,13 @@ export default function Words() {
       updated_at: new Date().toISOString(),
     };
 
-    setWords((prev) => [entry, ...prev]);
+    setWords((prev) => {
+      const next = [entry, ...prev];
+      queueMicrotask(() =>
+        bus.dispatchEvent(new CustomEvent('words-updated', { detail: { size: next.length } })),
+      );
+      return next;
+    });
     setOpen(false);
 
     if (useCloud) {
@@ -184,10 +188,10 @@ export default function Words() {
 
   const onSaveEdit = async () => {
     if (!editingId) return;
-
     let updatedObj = null;
-    setWords((prev) =>
-      prev.map((w) => {
+
+    setWords((prev) => {
+      const next = prev.map((w) => {
         if (w.id !== editingId) return w;
         updatedObj = {
           ...w,
@@ -202,8 +206,12 @@ export default function Words() {
           updated_at: new Date().toISOString(),
         };
         return updatedObj;
-      }),
-    );
+      });
+      queueMicrotask(() =>
+        bus.dispatchEvent(new CustomEvent('words-updated', { detail: { size: next.length } })),
+      );
+      return next;
+    });
 
     setEditingId(null);
     setOpen(false);
@@ -221,7 +229,13 @@ export default function Words() {
   };
 
   const delWord = async (id) => {
-    setWords((prev) => prev.filter((w) => w.id !== id));
+    setWords((prev) => {
+      const next = prev.filter((w) => w.id !== id);
+      queueMicrotask(() =>
+        bus.dispatchEvent(new CustomEvent('words-updated', { detail: { size: next.length } })),
+      );
+      return next;
+    });
     if (useCloud) {
       try {
         await cloudDeleteWord(id);
@@ -229,7 +243,7 @@ export default function Words() {
     }
   };
 
-  // -------- Filters + search ----------
+  // ---------- Filters + search ----------
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('all');
   const [dif, setDif] = useState('all');
@@ -254,6 +268,13 @@ export default function Words() {
     });
   }, [words, q, cat, dif]);
 
+  // ---------- Quick counts (top badges) ----------
+  const today = todayISO();
+  const totalCount = words.length;
+  const dueToday = words.filter(
+    (w) => w.modes?.flashcard && (!w.nextReview || w.nextReview <= today),
+  ).length;
+
   return (
     <section style={{ display: 'grid', gap: 12 }}>
       {/* Cloud/local badge */}
@@ -263,36 +284,27 @@ export default function Words() {
           : '📦 Local-only mode (sign in to sync across devices)'}
       </div>
 
+      {/* Counters */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Badge label="All words" value={totalCount} />
+        <Badge label="Due today" value={dueToday} />
+      </div>
+
       {/* Search + filters */}
       <div
-        style={{
-          border: '1px solid #e5e7eb',
-          borderRadius: 12,
-          padding: 12,
-          background: '#fff',
-        }}>
+        style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, background: '#fff' }}>
         <div style={{ display: 'grid', gap: 8 }}>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search word, translation, mnemonic…"
-            style={{
-              border: '1px solid #cbd5e1',
-              borderRadius: 12,
-              padding: 12,
-              fontSize: 16,
-            }}
+            style={{ border: '1px solid #cbd5e1', borderRadius: 12, padding: 12, fontSize: 16 }}
           />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <select
               value={cat}
               onChange={(e) => setCat(e.target.value)}
-              style={{
-                border: '1px solid #cbd5e1',
-                borderRadius: 12,
-                padding: 10,
-                fontSize: 14,
-              }}>
+              style={{ border: '1px solid #cbd5e1', borderRadius: 12, padding: 10, fontSize: 14 }}>
               {cats.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -302,12 +314,7 @@ export default function Words() {
             <select
               value={dif}
               onChange={(e) => setDif(e.target.value)}
-              style={{
-                border: '1px solid #cbd5e1',
-                borderRadius: 12,
-                padding: 10,
-                fontSize: 14,
-              }}>
+              style={{ border: '1px solid #cbd5e1', borderRadius: 12, padding: 10, fontSize: 14 }}>
               {diffs.map((d) => (
                 <option key={d} value={d}>
                   {d}
@@ -320,7 +327,6 @@ export default function Words() {
 
       {/* List */}
       {isMobile ? (
-        // Cards on mobile
         <div style={{ display: 'grid', gap: 10 }}>
           {filtered.map((w) => (
             <article
@@ -366,12 +372,7 @@ export default function Words() {
               )}
               {w.mnemonic && <div style={{ fontSize: 12, color: '#334155' }}>🧠 {w.mnemonic}</div>}
               <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 8,
-                  marginTop: 6,
-                }}>
+                style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 6 }}>
                 <button
                   className="wm-btn"
                   onClick={() => startEdit(w)}
@@ -394,7 +395,6 @@ export default function Words() {
           )}
         </div>
       ) : (
-        // Table on desktop
         <div style={{ overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
             <thead>
@@ -441,7 +441,7 @@ export default function Words() {
         </div>
       )}
 
-      {/* Floating Add button (mobile) or sticky button (desktop) */}
+      {/* FAB (mobile) / sticky button (desktop) */}
       {isMobile ? (
         <button
           aria-label="Add word"
@@ -466,7 +466,6 @@ export default function Words() {
           }}
           onMouseDown={(e) => (e.currentTarget.style.transform = 'translateY(1px)')}
           onMouseUp={(e) => (e.currentTarget.style.transform = 'translateY(0)')}>
-          {/* Centered SVG plus */}
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="28"
@@ -505,6 +504,25 @@ export default function Words() {
         onCancelEdit={onCancelEdit}
       />
     </section>
+  );
+}
+
+function Badge({ label, value }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '6px 10px',
+        borderRadius: 999,
+        background: '#f1f5f9',
+        color: '#0f172a',
+        fontSize: 12,
+        border: '1px solid #e2e8f0',
+      }}>
+      <strong>{label}:</strong> {value}
+    </span>
   );
 }
 

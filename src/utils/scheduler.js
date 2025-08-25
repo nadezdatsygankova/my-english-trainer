@@ -1,6 +1,14 @@
 // src/utils/scheduler.js
 
-// --- Binary SM-2–style (your legacy) ---
+// Helper: local YYYY-MM-DD (avoids UTC off-by-one)
+const formatLocalYMD = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+// --- Binary SM-2–style (legacy) ---
 export function scheduleCard(prev = {}, wasCorrect) {
   const w = {
     interval: prev.interval ?? 0, // days
@@ -24,8 +32,9 @@ export function scheduleCard(prev = {}, wasCorrect) {
   }
 
   const due = new Date();
+  due.setHours(0, 0, 0, 0);
   due.setDate(due.getDate() + Math.max(1, w.interval));
-  w.nextReview = due.toISOString().slice(0, 10);
+  w.nextReview = formatLocalYMD(due);
   return w;
 }
 
@@ -57,21 +66,19 @@ export function scheduleCard4(prev = {}, grade /* "again"|"hard"|"good"|"easy" *
     if (w.reps === 1) w.interval = 1;
     else if (w.reps === 2) w.interval = 3;
     else w.interval = Math.max(1, Math.round((w.interval || 1) * w.ease));
-    // ease unchanged for "good"
   } else if (grade === "easy") {
     w.reps = (w.reps || 0) + 1;
     w.ease = clampEF((w.ease || 2.5) + 0.15);
     if (w.reps <= 2) w.interval = 4;
     else w.interval = Math.max(2, Math.round((w.interval || 1) * (w.ease * 1.3)));
   } else {
-    // fallback if someone passes boolean by mistake
+    // If boolean slipped in, fall back to binary
     return scheduleCard(prev, !!grade);
   }
 
   const due = new Date();
+  due.setHours(0, 0, 0, 0);
   due.setDate(due.getDate() + Math.max(1, w.interval));
-  w.nextReview = due.toISOString().slice(0, 10);
+  w.nextReview = formatLocalYMD(due);
   return w;
 }
-
-
