@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Statistics from '../components/Statistics.jsx';
 import { getReviewLog } from '../utils/reviews.js';
 import { bus } from '../utils/bus.js';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../utils/supabaseClient';
 import { loadReviews } from '../utils/cloud';
 
 function dedupeByKey(arr, keyFn) {

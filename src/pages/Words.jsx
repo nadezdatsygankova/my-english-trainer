@@ -6,7 +6,7 @@ import { uid, todayISO, safeLower } from '../utils';
 import { autoTranslate } from '../utils/translator';
 
 // Cloud
-import { supabase } from '../supabaseClient';
+import { supabase } from '../utils/supabaseClient';
 import { loadWords, upsertWord, deleteWord as cloudDeleteWord } from '../utils/cloud';
 
 export default function Words() {

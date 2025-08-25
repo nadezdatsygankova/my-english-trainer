@@ -16,6 +16,7 @@ export default function SpellingGame({
   const [spellInput, setSpellInput] = React.useState("");
   const [spellMsg, setSpellMsg] = React.useState(null);
   const [hintTokens, setHintTokens] = React.useState([]);
+  const timeoutRef = React.useRef(null);
 
   // NEW hint state
   const [revealCount, setRevealCount] = React.useState(0); // how many leading letters revealed
@@ -35,6 +36,12 @@ export default function SpellingGame({
     setSpellMsg(null);
     setHintTokens([]);
   }, [idx]);
+
+  React.useEffect(() => {
+    return () => {
+      clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   if (!current) {
     return (
@@ -104,7 +111,7 @@ export default function SpellingGame({
   };
 
   const next = (delay = 0) => {
-    setTimeout(() => {
+    timeoutRef.current = setTimeout(() => {
       setSpellInput("");
       setSpellMsg(null);
       setHintTokens([]);

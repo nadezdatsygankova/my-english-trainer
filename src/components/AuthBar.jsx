@@ -1,13 +1,17 @@
 // src/components/AuthBar.jsx
 import React, { useState } from "react";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../utils/supabaseClient";
+import { useToast } from "./Toast.jsx";
+
 
 export default function AuthBar({ session }) {
   const [email, setEmail] = useState("");
+  const { push } = useToast();
 
 // wherever you call signInWithOAuth (e.g., AuthBar.jsx)
 const signInWithGitHub = async () => {
-  const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+  const isLocal =
+    location.hostname === "localhost" || location.hostname === "127.0.0.1";
 
   // On GitHub Pages, the app is at /my-english-trainer
   const redirectTo = isLocal
@@ -20,24 +24,28 @@ const signInWithGitHub = async () => {
     provider: "github",
     options: { redirectTo }, // <-- critical
   });
-  if (error) console.error("GitHub sign-in error:", error);
+  if (error) {
+    console.error("GitHub sign-in error:", error);
+    push(`GitHub sign-in error: ${error.message}`, "error");
+  }
 };
 
 const sendMagicLink = async (e) => {
   e.preventDefault();
-  if (!email) return alert("Enter email");
+  if (!email) return push("Enter email", "error");
 
-  const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+  const isLocal =
+    location.hostname === "localhost" || location.hostname === "127.0.0.1";
   const emailRedirectTo = isLocal
-    ? location.origin                         // http://localhost:5173
+    ? location.origin // http://localhost:5173
     : `${location.origin}/my-english-trainer`; // https://.../my-english-trainer
 
   const { error } = await supabase.auth.signInWithOtp({
     email,
-    options: { emailRedirectTo },   // <-- critical
+    options: { emailRedirectTo }, // <-- critical
   });
-  if (error) alert(error.message);
-  else alert("Magic link sent. Check your inbox.");
+  if (error) push(error.message, "error");
+  else push("Magic link sent. Check your inbox.", "success");
 };
 
   const signOut = async () => { await supabase.auth.signOut(); };

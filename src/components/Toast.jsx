@@ -13,6 +13,12 @@ export function ToastProvider({ children }) {
     }, ms);
   };
 
+  const styles = {
+    error: { background: "#fee2e2", color: "#7f1d1d" },
+    success: { background: "#dcfce7", color: "#14532d" },
+    info: { background: "#e0e7ff", color: "#1e3a8a" },
+  };
+
   return (
     <ToastCtx.Provider value={{ push }}>
       {children}
@@ -30,8 +36,7 @@ export function ToastProvider({ children }) {
           <div
             key={i.id}
             style={{
-              background: i.type === "error" ? "#fee2e2" : "#e0e7ff",
-              color: i.type === "error" ? "#7f1d1d" : "#1e3a8a",
+              ...(styles[i.type] || styles.info),
               padding: "10px 12px",
               borderRadius: 10,
               boxShadow: "0 8px 24px rgba(0,0,0,.12)",
@@ -46,6 +51,7 @@ export function ToastProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useToast() {
   return React.useContext(ToastCtx);
 }

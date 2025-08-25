@@ -1,7 +1,15 @@
 // helpers & algorithms (shared)
 export const todayISO = () => new Date().toISOString().split("T")[0];
 export const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
-export const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
+// Fisher-Yates shuffle to avoid the bias of Array.sort with Math.random
+export const shuffle = (arr) => {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
 export const uid = () =>
   (crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
 export const safeLower = (s) => (s || "").toString().toLowerCase();

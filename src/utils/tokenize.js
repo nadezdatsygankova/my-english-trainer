@@ -1,7 +1,8 @@
 // Keep punctuation & spaces as separate tokens; normalize lookup key to lowercase
 export function tokenizeText(text = "") {
   const tokens = [];
-  const re = /([A-Za-z]+(?:'[A-Za-z]+)?)|(\s+)|([^\sA-Za-z]+)/g;
+  // Use Unicode property escapes so that accented letters are treated as part of words
+  const re = /([\p{L}]+(?:'[\p{L}]+)?)|(\s+)|([^\s\p{L}]+)/gu;
   let m;
   while ((m = re.exec(text)) !== null) {
     if (m[1]) tokens.push({ type: "word", raw: m[1], key: m[1].toLowerCase() });
