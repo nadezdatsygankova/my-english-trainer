@@ -1,0 +1,25 @@
+{
+  "name": "My English Trainer",
+  "short_name": "Trainer",
+  "start_url": "/my-english-trainer/",
+  "scope": "/my-english-trainer/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "description": "Learn English with flashcards, spelling, and ear training.",
+  "icons": [
+    {
+      "src": "/my-english-trainer/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/my-english-trainer/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    { "src": "/my-english-trainer/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/my-english-trainer/favicon-32x32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/my-english-trainer/favicon-16x16.png", "sizes": "16x16", "type": "image/png" }
+  ]
+}

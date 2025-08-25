@@ -1,11 +1,11 @@
 // src/pages/Trainer.jsx
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Filters from '../components/Filters';
 import Flashcard from '../components/Flashcard';
 import EarTraining from '../components/EarTraining';
 import SpellingGame from '../components/SpellingGame';
 import { todayISO, clamp } from '../utils';
-import { scheduleCard } from '../utils/scheduler';
+import { scheduleCard, scheduleCard4 } from '../utils/scheduler';
 import { appendReview } from '../utils/reviews';
 import useIsMobile from '../utils/useIsMobile';
 
@@ -26,8 +26,11 @@ export default function Trainer() {
 
   // Words + progress
   const [words, setWords] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('words-v1') || '[]'); }
-    catch { return []; }
+    try {
+      return JSON.parse(localStorage.getItem('words-v1') || '[]');
+    } catch {
+      return [];
+    }
   });
   const [progress, setProgress] = useState(() => +localStorage.getItem('progress') || 0);
 
@@ -36,6 +39,10 @@ export default function Trainer() {
   const [filterDiff, setFilterDiff] = useState('all');
   const [showAnswer, setShowAnswer] = useState(false);
   const [idx, setIdx] = useState(0);
+  const [pictureOnly, setPictureOnly] = useState(() => localStorage.getItem('pictureOnly') === '1');
+  useEffect(() => {
+    localStorage.setItem('pictureOnly', pictureOnly ? '1' : '0');
+  }, [pictureOnly]);
 
   const dueList = useMemo(
     () => words.filter((w) => w.modes?.flashcard && (!w.nextReview || w.nextReview <= todayISO())),
@@ -82,12 +89,18 @@ export default function Trainer() {
 
   // Minimal pairs
   const [minimalPairs, setMinimalPairs] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('minimalPairs') || 'null') || DEFAULT_MINIMAL_PAIRS; }
-    catch { return DEFAULT_MINIMAL_PAIRS; }
+    try {
+      return JSON.parse(localStorage.getItem('minimalPairs') || 'null') || DEFAULT_MINIMAL_PAIRS;
+    } catch {
+      return DEFAULT_MINIMAL_PAIRS;
+    }
   });
   const [targetSounds, setTargetSounds] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('targetSounds') || '[]'); }
-    catch { return []; }
+    try {
+      return JSON.parse(localStorage.getItem('targetSounds') || '[]');
+    } catch {
+      return [];
+    }
   });
 
   const selectedFocuses = useMemo(() => {
@@ -140,6 +153,29 @@ export default function Trainer() {
       ),
     [words, filterCat, filterDiff],
   );
+  const gradeWith = (choice /* "again"|"hard"|"good"|"easy" */) => {
+    if (!current) return;
+    const nextObj = {
+      ...current,
+      ...scheduleCard4(current, choice),
+      updated_at: new Date().toISOString(),
+    };
+
+    setWords((prev) => prev.map((w) => (w.id === current.id ? nextObj : w)));
+    if (choice === 'good' || choice === 'easy') {
+      setProgress((p) => clamp(p + 5, 0, 100));
+    }
+
+    setShowAnswer(false);
+    setIdx((i) => (i + 1 < filteredDue.length ? i + 1 : 0));
+
+    appendReview({
+      id: current.id,
+      word: current.word,
+      correct: choice === 'good' || choice === 'easy',
+      mode: 'flashcard',
+    });
+  };
 
   const sectionStyle = {
     border: '1px solid #e5e7eb',
@@ -153,9 +189,7 @@ export default function Trainer() {
       <div style={sectionStyle}>
         <h2 style={{ marginTop: 0, fontSize: isMobile ? 18 : 20 }}>Progress</h2>
         <div style={{ background: '#e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
-          <div
-            style={{ width: `${progress}%`, background: '#3b82f6', height: 8 }}
-          />
+          <div style={{ width: `${progress}%`, background: '#3b82f6', height: 8 }} />
         </div>
         <div style={{ fontSize: 12, color: '#475569', marginTop: 6 }}>
           {progress}% complete • {filteredDue.length} due (filtered) / {words.length} total
@@ -174,13 +208,30 @@ export default function Trainer() {
       </div>
 
       {/* Flashcards */}
+      <label
+        style={{
+          display: 'inline-flex',
+          gap: 8,
+          alignItems: 'center',
+          fontSize: 12,
+          color: '#475569',
+        }}>
+        <input
+          type="checkbox"
+          checked={pictureOnly}
+          onChange={(e) => setPictureOnly(e.target.checked)}
+        />
+        Picture-only cards
+      </label>
       <div style={sectionStyle}>
         <Flashcard
           current={current}
+          pictureOnly={pictureOnly}
           showAnswer={showAnswer}
           setShowAnswer={setShowAnswer}
           speak={speak}
           grade={grade}
+          gradeWith={gradeWith}
         />
       </div>
 
@@ -198,8 +249,7 @@ export default function Trainer() {
                 border: '1px solid #cbd5e1',
                 background: '#fff',
                 fontWeight: 700,
-              }}
-            >
+              }}>
               Use all available focuses
             </button>
           </div>
@@ -220,10 +270,22 @@ export default function Trainer() {
         <SpellingGame
           words={spellingList}
           onCorrect={(w) =>
-            appendReview({ id: w.id, word: w.word, correct: true, date: todayISO(), mode: 'spelling' })
+            appendReview({
+              id: w.id,
+              word: w.word,
+              correct: true,
+              date: todayISO(),
+              mode: 'spelling',
+            })
           }
           onIncorrect={(w) =>
-            appendReview({ id: w.id, word: w.word, correct: false, date: todayISO(), mode: 'spelling' })
+            appendReview({
+              id: w.id,
+              word: w.word,
+              correct: false,
+              date: todayISO(),
+              mode: 'spelling',
+            })
           }
           // nice mobile typing experience:
           inputProps={{ inputMode: 'latin', autoCapitalize: 'off', autoCorrect: 'off' }}
@@ -235,13 +297,21 @@ export default function Trainer() {
         <div className="mob-bar">
           {!showAnswer ? (
             <div className="mob-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
-              <button className="mob-btn" onClick={() => speak(current.word)}>🔊 Speak</button>
-              <button className="mob-btn primary" onClick={() => setShowAnswer(true)}>Show answer</button>
+              <button className="mob-btn" onClick={() => speak(current.word)}>
+                🔊 Speak
+              </button>
+              <button className="mob-btn primary" onClick={() => setShowAnswer(true)}>
+                Show answer
+              </button>
             </div>
           ) : (
             <div className="mob-row">
-              <button className="mob-btn bad" onClick={() => grade(false)}>Again</button>
-              <button className="mob-btn good" onClick={() => grade(true)}>Good</button>
+              <button className="mob-btn bad" onClick={() => grade(false)}>
+                Again
+              </button>
+              <button className="mob-btn good" onClick={() => grade(true)}>
+                Good
+              </button>
             </div>
           )}
         </div>

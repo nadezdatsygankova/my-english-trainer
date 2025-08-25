@@ -9,11 +9,11 @@ export default function Flashcard({
   showAnswer,
   setShowAnswer,
   speak,
-  grade,
+  grade,        // boolean grader (existing)
+  gradeWith,    // optional: "again" | "hard" | "good" | "easy"
 }) {
-  // exit animation state
   const [slide, setSlide] = useState(""); // "", "slide-left", "slide-right"
-  const [reverse, setReverse] = useState(false); // NEW: reverse direction
+  const [reverse, setReverse] = useState(() => localStorage.getItem("fc-reverse") === "1");
   const cardRef = useRef(null);
   const animTimer = useRef(null);
 
@@ -32,29 +32,45 @@ export default function Flashcard({
     };
   }, []);
 
-  // keyboard helpers (Space = flip, R = reverse)
+  // Persist reverse mode
+  useEffect(() => {
+    localStorage.setItem("fc-reverse", reverse ? "1" : "0");
+  }, [reverse]);
+
+  // Keybindings
   useEffect(() => {
     const onKey = (e) => {
-      // avoid typing in inputs
       const tag = (e.target?.tagName || "").toLowerCase();
       if (tag === "input" || tag === "textarea") return;
 
       if (e.code === "Space") {
         e.preventDefault();
         setShowAnswer((s) => !s);
-      } else if (e.key.toLowerCase() === "r") {
+        return;
+      }
+      if (e.key.toLowerCase() === "r") {
         setReverse((r) => !r);
-      } else if (e.key === "ArrowLeft") {
-        handleGrade(false);
-      } else if (e.key === "ArrowRight") {
-        handleGrade(true);
+        return;
+      }
+
+      // 4-grade shortcuts (if available)
+      if (gradeWith) {
+        if (e.key === "1") return doGrade("again");
+        if (e.key === "2") return doGrade("hard");
+        if (e.key === "3") return doGrade("good");
+        if (e.key === "4") return doGrade("easy");
+      } else {
+        // binary fallback
+        if (e.key === "ArrowLeft") return handleBinary(false);
+        if (e.key === "ArrowRight") return handleBinary(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setShowAnswer]); // grade is stable via closure below
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gradeWith]);
 
-  // mobile swipe -> grade
+  // Mobile swipe -> grade (binary; works even if gradeWith provided)
   const touch = useRef({ x0: 0, y0: 0, dx: 0, moved: false });
   const onTouchStart = (e) => {
     const t = e.touches[0];
@@ -67,22 +83,30 @@ export default function Flashcard({
   };
   const onTouchEnd = () => {
     const dx = touch.current.dx;
-    if (Math.abs(dx) > 60) handleGrade(dx > 0);
+    if (Math.abs(dx) > 60) {
+      // right swipe = correct; left = wrong
+      if (gradeWith) {
+        doGrade(dx > 0 ? "good" : "again");
+      } else {
+        handleBinary(dx > 0);
+      }
+    }
   };
 
-  const handleGrade = (isCorrect) => {
+  // Animate out, then call grader
+  const animateAndGrade = (isRight, fn) => {
     if (!current) return;
     if (prefersReduce) {
       setShowAnswer(false);
-      grade(isCorrect);
+      fn();
       return;
     }
-    setSlide(isCorrect ? "slide-right" : "slide-left");
+    setSlide(isRight ? "slide-right" : "slide-left");
 
     const el = cardRef.current;
     if (!el) {
       setShowAnswer(false);
-      grade(isCorrect);
+      fn();
       setSlide("");
       return;
     }
@@ -95,19 +119,29 @@ export default function Flashcard({
       }
       setSlide("");
       setShowAnswer(false);
-      grade(isCorrect);
+      fn();
     };
 
     el.addEventListener("transitionend", onEnd, { once: true });
 
-    // fail-safe if transitionend is missed
     animTimer.current = setTimeout(() => {
       el.removeEventListener("transitionend", onEnd);
       setSlide("");
       setShowAnswer(false);
-      grade(isCorrect);
+      fn();
       animTimer.current = null;
-    }, 600); // > CSS transition (320–420ms)
+    }, 600);
+  };
+
+  // Binary handler (existing)
+  const handleBinary = (isCorrect) => {
+    animateAndGrade(isCorrect, () => grade?.(isCorrect));
+  };
+
+  // 4-grade handler → maps to animation direction (right for positive)
+  const doGrade = (g) => {
+    const positive = g === "good" || g === "easy";
+    animateAndGrade(positive, () => gradeWith?.(g));
   };
 
   if (!current) {
@@ -117,18 +151,18 @@ export default function Flashcard({
         <div style={{ color: "#64748b" }}>🎉 No cards due with current filters.</div>
       </section>
     );
-  }
+    }
 
-  // Direction-aware fields
   const frontMain = reverse ? (current.translation || "—") : current.word;
-  const backMain = reverse ? current.word : (current.translation || "—");
-
+  const backMain  = reverse ? current.word : (current.translation || "—");
+console.log('Flashcard build v2.1 (reverse mode enabled)');
   return (
+
     <section style={styles.card}>
+      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <div style={styles.h2}>Flashcards</div>
 
-        {/* Reverse toggle */}
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span style={{ fontSize: 12, color: "#475569" }}>
             Mode: <strong>{reverse ? "Translation → English" : "English → Translation"}</strong>
@@ -137,12 +171,7 @@ export default function Flashcard({
             type="button"
             onClick={() => setReverse((r) => !r)}
             title="Toggle direction (R)"
-            style={{
-              ...styles.ghost,
-              padding: "6px 10px",
-              lineHeight: 1,
-              whiteSpace: "nowrap",
-            }}
+            style={{ ...styles.ghost, padding: "6px 10px", lineHeight: 1, whiteSpace: "nowrap" }}
           >
             {reverse ? "EN ← TR" : "EN → TR"}
           </button>
@@ -191,7 +220,6 @@ export default function Flashcard({
                 transform: "translateZ(0)",
               }}
             >
-              {/* Header row: word + meta (only show IPA for English-on-front) */}
               <div style={{ fontSize: 22, fontWeight: 700, color: "#0f172a" }}>
                 {frontMain}{" "}
                 {!reverse && current.ipa && (
@@ -202,7 +230,6 @@ export default function Flashcard({
                 {current.category} • {current.difficulty}
               </div>
 
-              {/* Media / mnemonic (still useful in both modes) */}
               {pictureOnly && current.imageUrl ? (
                 <div
                   style={{
@@ -259,7 +286,6 @@ export default function Flashcard({
                     </div>
                   )}
                   <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                    {/* Only speak English side */}
                     {!reverse && (
                       <button type="button" style={styles.ghost} onClick={() => speak(current.word)}>
                         🔊 Speak
@@ -296,12 +322,10 @@ export default function Flashcard({
                 transform: "rotateY(180deg) translateZ(0)",
               }}
             >
-              {/* Back shows the opposite side */}
               <div style={{ fontSize: 22, fontWeight: 700, color: "#0f172a" }}>
                 {backMain}
               </div>
 
-              {/* If we’re revealing English on the back in reverse mode, show IPA & Speak */}
               {reverse && (
                 <>
                   {current.ipa && (
@@ -317,20 +341,31 @@ export default function Flashcard({
                 </>
               )}
 
-              {/* Example sentence always helpful when revealed */}
               {current.example && (
                 <div style={{ marginTop: 10, fontSize: 13, color: "#475569" }}>
                   Example: {current.example}
                 </div>
               )}
 
+              {/* Grading row */}
               <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-                <button type="button" style={styles.primary} onClick={() => handleGrade(true)}>
-                  ✅ I was right
-                </button>
-                <button type="button" style={styles.ghost} onClick={() => handleGrade(false)}>
-                  ❌ I was wrong
-                </button>
+                {gradeWith ? (
+                  <>
+                    <button type="button" style={styles.ghost}  onClick={() => doGrade("again")} title="1">↺ Again</button>
+                    <button type="button" style={styles.ghost}  onClick={() => doGrade("hard")}  title="2">😬 Hard</button>
+                    <button type="button" style={styles.primary} onClick={() => doGrade("good")}  title="3">✅ Good</button>
+                    <button type="button" style={styles.ghost}  onClick={() => doGrade("easy")}  title="4">✨ Easy</button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" style={styles.primary} onClick={() => handleBinary(true)}>
+                      ✅ I was right
+                    </button>
+                    <button type="button" style={styles.ghost} onClick={() => handleBinary(false)}>
+                      ❌ I was wrong
+                    </button>
+                  </>
+                )}
                 <button type="button" style={styles.ghost} onClick={() => setShowAnswer(false)}>
                   ⟲ Flip back
                 </button>
