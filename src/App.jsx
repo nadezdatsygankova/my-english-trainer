@@ -11,6 +11,8 @@ import { scheduleCard } from './utils/scheduler';
 import { autoTranslate } from './utils/translator';
 import { loadWords, upsertWord, deleteWord as cloudDeleteWord, insertReview } from './utils/cloud';
 import { bus } from './utils/bus';
+import ReadingWords from './pages/ReadingWords';
+import GoalWidget from './components/GoalWidget';
 // pages
 import Home from './pages/Home.jsx';
 import Trainer from './pages/Trainer.jsx';
@@ -57,6 +59,7 @@ function Layout({ session }) {
             <NavLink to="/settings">Settings</NavLink>
           </nav>
           <AuthBar session={session} />
+          <GoalWidget />
         </div>
       </header>
 
@@ -186,6 +189,17 @@ export default function App() {
               progress={progress}
               setProgress={setProgress}
               session={session}
+            />
+          }
+        />
+        <Route
+          path="reading-words"
+          element={
+            <ReadingWords
+              deck={words /* pass your current deck array from App or load from localStorage */}
+              onAddWord={(w) => {
+                /* reuse your add/upsert flow here */
+              }}
             />
           }
         />

@@ -1,49 +1,44 @@
 // src/components/Reader.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import styles from "../styles";
-import WordPopover from "./WordPopover";
-import { tokenizeText } from "../utils/tokenize";
-import {
-  getLessons,
-  addLesson,
-  deleteLesson,
-  getStatuses,
-  setStatus,
-} from "../utils/statusStore";
-import { autoTranslate } from "../utils/translator";
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import styles from '../styles';
+import WordPopover from './WordPopover';
+import { tokenizeText } from '../utils/tokenize';
+import { getLessons, addLesson, deleteLesson, getStatuses, setStatus } from '../utils/statusStore';
+import { autoTranslate } from '../utils/translator';
+import { bus } from '../utils/bus';
 
 // Helper: find matching word in your deck (for ipa/translation)
 function findDeckInfo(deck, key) {
   const low = key.toLowerCase();
-  return deck.find((w) => (w.word || "").toLowerCase() === low) || null;
+  return deck.find((w) => (w.word || '').toLowerCase() === low) || null;
 }
 
 // Lightweight IPA helper (gracefully falls back)
 async function fetchIPA(word) {
   try {
     const r = await fetch(
-     `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
     );
-   if (!r.ok) return "";
+    if (!r.ok) return '';
     const data = await r.json();
     const entry = Array.isArray(data) ? data[0] : null;
-    const phon = entry?.phonetic || (entry?.phonetics?.find((p) => p.text)?.text) || "";
-    return phon || "";
+    const phon = entry?.phonetic || entry?.phonetics?.find((p) => p.text)?.text || '';
+    return phon || '';
   } catch {
-    return "";
+    return '';
   }
 }
 export default function Reader({ words = [], onAddWord, speak }) {
-  const [text, setText] = useState("");
-  const [title, setTitle] = useState("");
+  const [text, setText] = useState('');
+  const [title, setTitle] = useState('');
   const [lessons, setLessons] = useState(() => getLessons());
   const [statuses, setStatuses] = useState(() => getStatuses());
-// Read current settings (saved by Settings page)
-  const targetLang = useMemo(() => localStorage.getItem("targetLang") || "ru", []);
+  // Read current settings (saved by Settings page)
+  const targetLang = useMemo(() => localStorage.getItem('targetLang') || 'ru', []);
   const autoTranslateEnabled = useMemo(
-    () => localStorage.getItem("autoTranslateEnabled") === "1",
-    []
+    () => localStorage.getItem('autoTranslateEnabled') === '1',
+    [],
   );
   // popover state
   const [popWord, setPopWord] = useState(null);
@@ -59,18 +54,18 @@ export default function Reader({ words = [], onAddWord, speak }) {
       known = 0,
       ignored = 0;
     for (const t of tokens) {
-      if (t.type !== "word") continue;
-      const s = statuses[t.key] || "unknown";
-      if (s === "unknown") unknown++;
-      else if (s === "learning") learning++;
-      else if (s === "known") known++;
-      else if (s === "ignored") ignored++;
+      if (t.type !== 'word') continue;
+      const s = statuses[t.key] || 'unknown';
+      if (s === 'unknown') unknown++;
+      else if (s === 'learning') learning++;
+      else if (s === 'known') known++;
+      else if (s === 'ignored') ignored++;
     }
     return { unknown, learning, known, ignored };
   }, [tokens, statuses]);
 
   const onWordClick = (e, t) => {
-    if (t.type !== "word") return;
+    if (t.type !== 'word') return;
     const rect = e.currentTarget.getBoundingClientRect();
     setPopRect(rect);
     setPopWord(t.key);
@@ -83,42 +78,42 @@ export default function Reader({ words = [], onAddWord, speak }) {
 
   // add to deck (flashcards)
   const addToDeck = async (rawWord, { doTranslate = false, doIPA = false } = {}) => {
-    let translation = "";
+    let translation = '';
     if (doTranslate || (autoTranslateEnabled && !translation)) {
       try {
-        translation = await autoTranslate(rawWord, { from: "en", to: targetLang });
+        translation = await autoTranslate(rawWord, { from: 'en', to: targetLang });
       } catch {}
     }
-    let ipa = "";
+    let ipa = '';
     if (doIPA) {
       ipa = await fetchIPA(rawWord);
     }
     onAddWord?.({
       word: rawWord,
       translation,
-      category: "noun",
-      difficulty: "easy",
+      category: 'noun',
+      difficulty: 'easy',
       ipa,
-      mnemonic: "",
-      imageUrl: "",
+      mnemonic: '',
+      imageUrl: '',
       modes: { flashcard: true, spelling: true },
     });
   };
 
   // coloring similar to LingQ
   const colorFor = (key) => {
-    const s = statuses[key] || "unknown";
-    if (s === "known") return "#dcfce7"; // greenish
-    if (s === "learning") return "#fef9c3"; // yellowish
-    if (s === "ignored") return "#e5e7eb"; // greyer
-    return "#f1f5f9"; // unknown
+    const s = statuses[key] || 'unknown';
+    if (s === 'known') return '#dcfce7'; // greenish
+    if (s === 'learning') return '#fef9c3'; // yellowish
+    if (s === 'ignored') return '#e5e7eb'; // greyer
+    return '#f1f5f9'; // unknown
   };
   const textColorFor = (key) => {
-    const s = statuses[key] || "unknown";
-    if (s === "known") return "#14532d";
-    if (s === "learning") return "#7c2d12";
-    if (s === "ignored") return "#475569";
-    return "#0f172a";
+    const s = statuses[key] || 'unknown';
+    if (s === 'known') return '#14532d';
+    if (s === 'learning') return '#7c2d12';
+    if (s === 'ignored') return '#475569';
+    return '#0f172a';
   };
 
   const deckInfo = (key) => findDeckInfo(words, key);
@@ -126,10 +121,10 @@ export default function Reader({ words = [], onAddWord, speak }) {
   // save/open lessons
   const saveLesson = () => {
     if (!text.trim()) return;
-    addLesson(title || "Untitled", text);
+    addLesson(title || 'Untitled', text);
     setLessons(getLessons());
-    setTitle("");
-    setText("");
+    setTitle('');
+    setText('');
   };
   const openLesson = (id) => {
     const l = lessons.find((x) => x.id === id);
@@ -144,18 +139,18 @@ export default function Reader({ words = [], onAddWord, speak }) {
   // keyboard ESC closes popover
   useEffect(() => {
     const handler = (e) => {
-      if (e.key === "Escape") clearPopover();
+      if (e.key === 'Escape') clearPopover();
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, []);
 
   return (
-    <section style={{ ...styles.card, position: "relative" }}>
+    <section style={{ ...styles.card, position: 'relative' }}>
       <div style={styles.h2}>Assisted Reader</div>
 
       {/* Counters */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0 12px" }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '8px 0 12px' }}>
         <Badge label="New" value={counts.unknown} color="#0f172a" bg="#e2e8f0" />
         <Badge label="Learning" value={counts.learning} color="#92400e" bg="#fef3c7" />
         <Badge label="Known" value={counts.known} color="#065f46" bg="#d1fae5" />
@@ -163,9 +158,9 @@ export default function Reader({ words = [], onAddWord, speak }) {
       </div>
 
       {/* Editor / controls */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         <div>
-          <label style={{ display: "block", color: "#0f172a", fontWeight: 700, marginBottom: 6 }}>
+          <label style={{ display: 'block', color: '#0f172a', fontWeight: 700, marginBottom: 6 }}>
             Title
           </label>
           <input
@@ -176,7 +171,7 @@ export default function Reader({ words = [], onAddWord, speak }) {
           />
         </div>
         <div style={{ marginLeft: 10 }}>
-          <label style={{ display: "block", color: "#0f172a", fontWeight: 700, marginBottom: 16 }}>
+          <label style={{ display: 'block', color: '#0f172a', fontWeight: 700, marginBottom: 16 }}>
             Import .txt
           </label>
           <label style={styles.ghost}>
@@ -184,14 +179,14 @@ export default function Reader({ words = [], onAddWord, speak }) {
             <input
               type="file"
               accept=".txt"
-              style={{ display: "none" }}
+              style={{ display: 'none' }}
               onChange={async (e) => {
                 const f = e.target.files?.[0];
                 if (!f) return;
                 const t = await f.text();
                 setText(t);
-                setTitle(f.name.replace(/\.[^.]+$/, ""));
-                e.target.value = "";
+                setTitle(f.name.replace(/\.[^.]+$/, ''));
+                e.target.value = '';
               }}
             />
           </label>
@@ -199,29 +194,28 @@ export default function Reader({ words = [], onAddWord, speak }) {
       </div>
 
       <div style={{ marginTop: 10 }}>
-        <label style={{ display: "block", color: "#0f172a", fontWeight: 700, marginBottom: 6 }}>
+        <label style={{ display: 'block', color: '#0f172a', fontWeight: 700, marginBottom: 6 }}>
           Text
         </label>
         <textarea
           className="ff-textarea"
-          style={{ ...styles.input, height: 140, resize: "vertical" }}
+          style={{ ...styles.input, height: 140, resize: 'vertical' }}
           placeholder="Paste or type your text here..."
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
       </div>
 
-      <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button style={styles.primary} onClick={saveLesson}>
           Save lesson
         </button>
         <button
           style={styles.ghost}
           onClick={() => {
-            setText("");
-            setTitle("");
-          }}
-        >
+            setText('');
+            setTitle('');
+          }}>
           Clear
         </button>
         {text && (
@@ -231,17 +225,29 @@ export default function Reader({ words = [], onAddWord, speak }) {
             </button>
             <button
               style={styles.ghost}
-              onClick={() => {
-                // mark all words as learning
+              oonClick={() => {
+                // all unique word tokens in the text
                 const unique = Array.from(
-                  new Set(tokens.filter((t) => t.type === "word").map((t) => t.key))
+                  new Set(tokens.filter((t) => t.type === 'word').map((t) => t.key)),
                 );
-                const merged = { ...getStatuses() };
-                for (const k of unique) merged[k] = "learning";
-                localStorage.setItem("wordStatus-v1", JSON.stringify(merged));
+
+                // previous map (before changes)
+                const prev = { ...getStatuses() };
+
+                // set each to learning
+                const merged = { ...prev };
+                for (const k of unique) merged[k] = 'learning';
+
+                localStorage.setItem('wordStatus-v1', JSON.stringify(merged));
                 setStatuses(merged);
-              }}
-            >
+
+                // events only for words that newly became learning
+                for (const k of unique) {
+                  if ((prev[k] || 'unknown') !== 'learning') {
+                    bus.dispatchEvent(new CustomEvent('lingq-created', { detail: { lemma: k } }));
+                  }
+                }
+              }}>
               Mark all as learning
             </button>
           </>
@@ -251,24 +257,22 @@ export default function Reader({ words = [], onAddWord, speak }) {
       {/* Lesson library */}
       {lessons.length > 0 && (
         <div style={{ marginTop: 14 }}>
-          <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>My lessons</div>
+          <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>My lessons</div>
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
               gap: 10,
-            }}
-          >
+            }}>
             {lessons.map((l) => (
               <div
                 key={l.id}
-                style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}
-              >
-                <div style={{ fontWeight: 700, color: "#0f172a" }}>{l.title}</div>
-                <div style={{ fontSize: 12, color: "#64748b" }}>
+                style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 10 }}>
+                <div style={{ fontWeight: 700, color: '#0f172a' }}>{l.title}</div>
+                <div style={{ fontSize: 12, color: '#64748b' }}>
                   {new Date(l.createdAt).toLocaleDateString()}
                 </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                   <button style={styles.ghost} onClick={() => openLesson(l.id)}>
                     Open
                   </button>
@@ -287,14 +291,13 @@ export default function Reader({ words = [], onAddWord, speak }) {
         <div
           style={{
             marginTop: 16,
-            border: "1px solid #e2e8f0",
+            border: '1px solid #e2e8f0',
             borderRadius: 12,
             padding: 14,
             lineHeight: 1.9,
-          }}
-        >
+          }}>
           {tokens.map((t, i) => {
-            if (t.type !== "word") return <span key={i}>{t.raw}</span>;
+            if (t.type !== 'word') return <span key={i}>{t.raw}</span>;
             const info = deckInfo(t.key);
             const bg = colorFor(t.key);
             const color = textColorFor(t.key);
@@ -305,16 +308,13 @@ export default function Reader({ words = [], onAddWord, speak }) {
                 style={{
                   background: bg,
                   color,
-                  padding: "2px 4px",
+                  padding: '2px 4px',
                   borderRadius: 6,
-                  cursor: "pointer",
+                  cursor: 'pointer',
                   border:
-                    statuses[t.key] === "ignored"
-                      ? "1px dashed #cbd5e1"
-                      : "1px solid transparent",
+                    statuses[t.key] === 'ignored' ? '1px dashed #cbd5e1' : '1px solid transparent',
                 }}
-                title={info?.translation || "Click to set status / add card"}
-              >
+                title={info?.translation || 'Click to set status / add card'}>
                 {t.raw}
               </span>
             );
@@ -330,15 +330,25 @@ export default function Reader({ words = [], onAddWord, speak }) {
             word={popWord}
             ipa={findDeckInfo(words, popWord)?.ipa}
             translation={findDeckInfo(words, popWord)?.translation}
-            status={statuses[popWord] || "unknown"}
-            onSetStatus={(s) => {
-              setStatuses(setStatus(popWord, s));
+            status={statuses[popWord] || 'unknown'}
+            onSetStatus={(newStatus) => {
+              const key = popWord;
+              const prevStatus = statuses[key] || 'unknown';
+
+              // update store + state
+              const next = setStatus(key, newStatus);
+              setStatuses(next);
+
+              // event: only when entering "learning"
+              if (newStatus === 'learning' && prevStatus !== 'learning') {
+                bus.dispatchEvent(new CustomEvent('lingq-created', { detail: { lemma: key } }));
+              }
             }}
             onAdd={() => addToDeck(popWord, { doTranslate: false, doIPA: false })}
             onAddTranslate={() => addToDeck(popWord, { doTranslate: true, doIPA: false })}
-           onAddIPA={() => addToDeck(popWord, { doTranslate: autoTranslateEnabled, doIPA: true })}
-           autoTranslateEnabled={autoTranslateEnabled}
-           targetLang={targetLang}
+            onAddIPA={() => addToDeck(popWord, { doTranslate: autoTranslateEnabled, doIPA: true })}
+            autoTranslateEnabled={autoTranslateEnabled}
+            targetLang={targetLang}
             onClose={clearPopover}
             speak={speak}
           />
@@ -355,11 +365,10 @@ function Badge({ label, value, color, bg }) {
         color,
         background: bg,
         borderRadius: 999,
-        padding: "4px 10px",
+        padding: '4px 10px',
         fontSize: 12,
         fontWeight: 700,
-      }}
-    >
+      }}>
       {label}: {value}
     </span>
   );
@@ -369,11 +378,11 @@ function Badge({ label, value, color, bg }) {
 function WordPopoverPortal({ children }) {
   const elRef = useRef(null);
 
-  if (!elRef.current && typeof document !== "undefined") {
-    const el = document.createElement("div");
-    el.style.position = "absolute";
-    el.style.inset = "0";
-    el.style.zIndex = "999";
+  if (!elRef.current && typeof document !== 'undefined') {
+    const el = document.createElement('div');
+    el.style.position = 'absolute';
+    el.style.inset = '0';
+    el.style.zIndex = '999';
     elRef.current = el;
   }
 
@@ -390,4 +399,3 @@ function WordPopoverPortal({ children }) {
   if (!elRef.current) return null;
   return createPortal(children, elRef.current);
 }
-
