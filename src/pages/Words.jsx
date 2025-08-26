@@ -5,6 +5,7 @@ import useIsMobile from '../utils/useIsMobile';
 import { uid, todayISO, safeLower } from '../utils';
 import { autoTranslate } from '../utils/translator';
 import { bus } from '../utils/bus';
+import { getIPA } from '../utils/ipa';
 
 // Cloud
 import { supabase } from '../utils/supabaseClient';
@@ -143,12 +144,20 @@ export default function Words() {
     if (!word) return;
 
     let translation = (form.translation || '').trim();
+
+    // Auto-translate if enabled and blank (you already had this)
     if (autoTranslateEnabled && !translation) {
       try {
         translation = await autoTranslate(word, { from: 'en', to: targetLang });
-      } catch (err) {
-        console.warn('[Words] autoTranslate failed:', err);
-      }
+      } catch {}
+    }
+
+    // NEW: auto-IPA if empty
+    let ipa = (form.ipa || '').trim();
+    if (!ipa) {
+      try {
+        ipa = await getIPA(word);
+      } catch {}
     }
 
     const entry = {
@@ -157,7 +166,7 @@ export default function Words() {
       translation,
       category: form.category,
       difficulty: form.difficulty,
-      ipa: form.ipa || '',
+      ipa, // ← use auto-filled IPA
       mnemonic: form.mnemonic || '',
       imageUrl: form.imageUrl || '',
       modes: form.modes ?? { flashcard: true, spelling: true },
@@ -170,15 +179,8 @@ export default function Words() {
       updated_at: new Date().toISOString(),
     };
 
-    setWords((prev) => {
-      const next = [entry, ...prev];
-      queueMicrotask(() =>
-        bus.dispatchEvent(new CustomEvent('words-updated', { detail: { size: next.length } })),
-      );
-      return next;
-    });
+    setWords((prev) => [entry, ...prev]);
     setOpen(false);
-
     if (useCloud) {
       try {
         await upsertWord(session.user.id, entry);
