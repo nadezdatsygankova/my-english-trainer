@@ -11,6 +11,7 @@ import {
   getStatuses,
   setStatus,
 } from "../utils/statusStore";
+import { autoTranslate } from "../utils/translator";
 
 // Helper: find matching word in your deck (for ipa/translation)
 function findDeckInfo(deck, key) {
@@ -18,12 +19,32 @@ function findDeckInfo(deck, key) {
   return deck.find((w) => (w.word || "").toLowerCase() === low) || null;
 }
 
+// Lightweight IPA helper (gracefully falls back)
+async function fetchIPA(word) {
+  try {
+    const r = await fetch(
+     `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`
+    );
+   if (!r.ok) return "";
+    const data = await r.json();
+    const entry = Array.isArray(data) ? data[0] : null;
+    const phon = entry?.phonetic || (entry?.phonetics?.find((p) => p.text)?.text) || "";
+    return phon || "";
+  } catch {
+    return "";
+  }
+}
 export default function Reader({ words = [], onAddWord, speak }) {
   const [text, setText] = useState("");
   const [title, setTitle] = useState("");
   const [lessons, setLessons] = useState(() => getLessons());
   const [statuses, setStatuses] = useState(() => getStatuses());
-
+// Read current settings (saved by Settings page)
+  const targetLang = useMemo(() => localStorage.getItem("targetLang") || "ru", []);
+  const autoTranslateEnabled = useMemo(
+    () => localStorage.getItem("autoTranslateEnabled") === "1",
+    []
+  );
   // popover state
   const [popWord, setPopWord] = useState(null);
   const [popRect, setPopRect] = useState(null);
@@ -61,13 +82,23 @@ export default function Reader({ words = [], onAddWord, speak }) {
   };
 
   // add to deck (flashcards)
-  const addToDeck = (rawWord) => {
+  const addToDeck = async (rawWord, { doTranslate = false, doIPA = false } = {}) => {
+    let translation = "";
+    if (doTranslate || (autoTranslateEnabled && !translation)) {
+      try {
+        translation = await autoTranslate(rawWord, { from: "en", to: targetLang });
+      } catch {}
+    }
+    let ipa = "";
+    if (doIPA) {
+      ipa = await fetchIPA(rawWord);
+    }
     onAddWord?.({
       word: rawWord,
-      translation: "",
+      translation,
       category: "noun",
       difficulty: "easy",
-      ipa: "",
+      ipa,
       mnemonic: "",
       imageUrl: "",
       modes: { flashcard: true, spelling: true },
@@ -303,18 +334,11 @@ export default function Reader({ words = [], onAddWord, speak }) {
             onSetStatus={(s) => {
               setStatuses(setStatus(popWord, s));
             }}
-            onAddToDeck={(w) =>
-              onAddWord?.({
-                word: w,
-                translation: "",
-                category: "noun",
-                difficulty: "easy",
-                ipa: "",
-                mnemonic: "",
-                imageUrl: "",
-                modes: { flashcard: true, spelling: true },
-              })
-            }
+            onAdd={() => addToDeck(popWord, { doTranslate: false, doIPA: false })}
+            onAddTranslate={() => addToDeck(popWord, { doTranslate: true, doIPA: false })}
+           onAddIPA={() => addToDeck(popWord, { doTranslate: autoTranslateEnabled, doIPA: true })}
+           autoTranslateEnabled={autoTranslateEnabled}
+           targetLang={targetLang}
             onClose={clearPopover}
             speak={speak}
           />
