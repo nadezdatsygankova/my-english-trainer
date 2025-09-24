@@ -94,7 +94,7 @@ export default function GoalWidget() {
         background: '#fff',
       }}>
       <span style={{ fontSize: 12, color: '#475569' }}>
-        LingQs: <strong>{state.lingqs}</strong>/<strong>{state.goal}</strong>
+        Words: <strong>{state.lingqs}</strong>/<strong>{state.goal}</strong>
       </span>
       <div
         style={{
