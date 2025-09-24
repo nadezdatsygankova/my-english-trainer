@@ -50,3 +50,9 @@ export async function autoTranslate(text, { from = 'en', to = 'ru' } = {}) {
   // If everything fails, just return the source so UI doesn’t break
   return q;
 }
+
+export function openInGoogleTranslate(text, from = 'en', to = 'ru') {
+  const encoded = encodeURIComponent(text.trim());
+  const url = `https://translate.google.com/?sl=${from}&tl=${to}&text=${encoded}&op=translate`;
+  window.open(url, '_blank');
+}

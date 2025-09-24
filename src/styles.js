@@ -7,14 +7,8 @@ const styles = {
   title: { fontSize: 'clamp(18px,4vw,24px)', fontWeight: 800, color: '#0f172a' },
   body: { padding: 'clamp(12px,2.5vw,20px)' },
   row: { display: 'flex', gap: 'clamp(10px,2vw,16px)', flexWrap: 'wrap' },
-  card: { flex: '1 1 320px', background: '#fff', border: '1px solid #eef2f7', borderRadius: 16, boxShadow: '0 6px 24px rgba(15,23,42,.06)', padding: 'clamp(14px,2.5vw,20px)' },
   progressShell: { width: '100%', height: 12, borderRadius: 999, background: '#e2e8f0', overflow: 'hidden' },
   progressFill: (pct) => ({ height: '100%', width: pct + '%', background: '#6366f1', transition: 'width .3s' }),
-  h2: { fontSize: 'clamp(16px,3.5vw,18px)', fontWeight: 700, margin: 0, marginBottom: 'clamp(6px,1.5vw,10px)', color: '#0f172a' },
-  primary: { background: '#6366f1', color: '#fff', border: 0, padding: 'clamp(10px,2.5vw,12px) clamp(12px,3vw,14px)', borderRadius: 12, cursor: 'pointer', minHeight: 44, fontSize: 'clamp(14px,3.5vw,16px)' },
-  ghost: { background: 'transparent', color: '#0f172a', border: '1px solid #cbd5e1', padding: 'clamp(10px,2.5vw,12px) clamp(12px,3vw,14px)', borderRadius: 12, cursor: 'pointer', minHeight: 44, fontSize: 'clamp(14px,3.5vw,16px)' },
-  danger: { background: '#ef4444', color: '#fff', border: 0, padding: '8px 12px', borderRadius: 10, cursor: 'pointer', minHeight: 40 },
-  input: { width: '100%', padding: 'clamp(10px,2.6vw,12px)', border: '1px solid #cbd5e1', borderRadius: 12, outline: 'none', background: '#fff', color: '#111827', minHeight: 44, fontSize: 'clamp(14px,3.5vw,16px)' },
   selectBtn: { width: '100%', padding: 'clamp(10px,2.6vw,12px)', border: '1px solid #d1d5db', borderRadius: 12, outline: 'none', background: '#f9fafb', textAlign: 'left', cursor: 'pointer', color: '#111827', minHeight: 44, fontSize: 'clamp(14px,3.5vw,16px)' },
   listItem: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderBottom: '1px dashed #e2e8f0', flexWrap: 'wrap' },
   modalBackdrop: { position: 'fixed', inset: 0, background: 'rgba(2,6,23,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'clamp(10px,3vw,16px)', zIndex: 40 },
@@ -52,7 +46,47 @@ const styles = {
     lineHeight: 1,
     whiteSpace: 'nowrap',
   },
-  
+  card: {
+    background: 'var(--card)',
+    border: '1px solid var(--border)',
+    borderRadius: 12,
+    padding: 12,
+    boxShadow: '0 10px 24px var(--shadow)',
+  },
+  h2: { fontSize: 20, fontWeight: 800, color: 'var(--text)' },
+  input: {
+    background: 'var(--card)',
+    color: 'var(--text)',
+    border: '1px solid var(--border)',
+    borderRadius: 12,
+    padding: '10px 12px',
+  },
+  primary: {
+    background: 'var(--primary)',
+    color: 'var(--primary-text)',
+    border: '1px solid transparent',
+    borderRadius: 10,
+    padding: '8px 12px',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  ghost: {
+    background: 'var(--card)',
+    color: 'var(--text)',
+    border: '1px solid var(--border)',
+    borderRadius: 10,
+    padding: '8px 12px',
+    cursor: 'pointer',
+  },
+  danger: {
+    background: 'var(--danger)',
+    color: 'var(--danger-text)',
+    border: '1px solid transparent',
+    borderRadius: 10,
+    padding: '8px 12px',
+    cursor: 'pointer',
+  }
+
 };
 export default styles;
 

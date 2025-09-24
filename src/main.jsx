@@ -5,6 +5,7 @@ import App from './App.jsx'
 import ErrorBoundary from "./components/ErrorBoundary";
 import { HashRouter } from "react-router-dom";
 import { ToastProvider } from "./components/Toast.jsx";
+import './theme.css';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

@@ -21,6 +21,9 @@ import ReaderPage from './pages/ReaderPage.jsx';
 import Words from './pages/Words.jsx';
 import Stats from './pages/Stats.jsx';
 import Settings from './pages/Settings.jsx';
+import Books from './pages/Books.jsx';
+import Book from './pages/Book.jsx';
+import Habits from './pages/Habits.jsx';
 
 const DEFAULT_MINIMAL_PAIRS = [
   { a: 'ship', b: 'sheep', ipa: '/ʃɪp/ vs /ʃiːp/', focus: 'ɪ vs iː' },
@@ -54,8 +57,10 @@ function Layout({ session }) {
             <NavLink to="/trainer">Trainer</NavLink>
             <NavLink to="/words">Words</NavLink>
             <NavLink to="/reader">Reader</NavLink>
+            <NavLink to="/books">Books</NavLink>
             {/* <NavLink to="/podcasts">Podcasts</NavLink> */}
             <NavLink to="/stats">Statistics</NavLink>
+            <NavLink to="/habits">Habits</NavLink>
             <NavLink to="/settings">Settings</NavLink>
           </nav>
           <AuthBar session={session} />
@@ -203,6 +208,8 @@ export default function App() {
             />
           }
         />
+        <Route path="books" element={<Books />} />
+        <Route path="books/:id" element={<Book />} />
         {/* <Route
           path="podcasts"
           element={
@@ -242,6 +249,7 @@ export default function App() {
             />
           }
         />
+        <Route path="habits" element={<Habits />} />
         <Route path="settings" element={<Settings />} /> {/* ← new */}
         <Route path="*" element={<Home />} />
       </Route>

@@ -1,0 +1,117 @@
+/* Light defaults */
+:root {
+  --bg: #f6f8fb;
+  --text: #0f172a;
+  --muted: #64748b;
+
+  --card: #ffffff;
+  --border: #e5e7eb;
+  --shadow: rgba(15, 23, 42, 0.06);
+
+  --primary: #3b82f6;
+  --primary-text: #ffffff;
+
+  --danger: #ef4444;
+  --danger-text: #ffffff;
+
+  /* habit cells */
+  --cell: var(--card);
+  --cell-today: #dbeafe;
+  --cell-done: #a7f3d0;
+  --cell-done-today: #22c55e;
+  --cell-text-done: #064e3b;
+
+  /* soft gradients for “name card” */
+  --grad-1-a: #dbeafe;
+  --grad-1-b: #f5f3ff;
+  --grad-2-a: #dcfce7;
+  --grad-2-b: #fef9c3;
+  --grad-3-a: #fee2e2;
+  --grad-3-b: #fef3c7;
+  --grad-4-a: #e0e7ff;
+  --grad-4-b: #ede9fe;
+  --grad-5-a: #cffafe;
+  --grad-5-b: #e5e7eb;
+}
+
+/* Dark mode overrides */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1220;
+    --text: #e5e7eb;
+    --muted: #94a3b8;
+
+    --card: #0f172a;
+    --border: #1f2937;
+    --shadow: rgba(0, 0, 0, 0.45);
+
+    --primary: #60a5fa;
+    --primary-text: #0b1220;
+
+    --danger: #f87171;
+    --danger-text: #0b1220;
+
+    /* habit cells */
+    --cell: var(--card);
+    --cell-today: #1e293b; /* subtle slate highlight */
+    --cell-done: #134e4a; /* teal-ish */
+    --cell-done-today: #16a34a; /* green */
+    --cell-text-done: #d1fae5;
+
+    /* darker gradients */
+    --grad-1-a: #0b1220;
+    --grad-1-b: #141b2a;
+    --grad-2-a: #0f1f1a;
+    --grad-2-b: #1a2230;
+    --grad-3-a: #1b1414;
+    --grad-3-b: #1f1a12;
+    --grad-4-a: #121629;
+    --grad-4-b: #17142b;
+    --grad-5-a: #0b1a1a;
+    --grad-5-b: #171a1d;
+  }
+}
+
+/* Optional base styling for the whole app */
+html,
+body,
+#root {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Generic elements that your inline styles can keep using */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 24px var(--shadow);
+}
+
+.input {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.btn {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+.btn.primary {
+  background: var(--primary);
+  color: var(--primary-text);
+  border-color: transparent;
+}
+
+.btn.danger {
+  background: var(--danger);
+  color: var(--danger-text);
+  border-color: transparent;
+}

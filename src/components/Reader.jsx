@@ -43,6 +43,7 @@ export default function Reader({ words = [], onAddWord, speak }) {
   // popover state
   const [popWord, setPopWord] = useState(null);
   const [popRect, setPopRect] = useState(null);
+  const [selectedText, setSelectedText] = useState('');
 
   // tokenized output
   const tokens = useMemo(() => tokenizeText(text), [text]);
@@ -69,11 +70,13 @@ export default function Reader({ words = [], onAddWord, speak }) {
     const rect = e.currentTarget.getBoundingClientRect();
     setPopRect(rect);
     setPopWord(t.key);
+    setSelectedText('');
   };
 
   const clearPopover = () => {
     setPopWord(null);
     setPopRect(null);
+    setSelectedText(null);
   };
 
   // add to deck (flashcards)
@@ -85,13 +88,13 @@ export default function Reader({ words = [], onAddWord, speak }) {
       } catch {}
     }
     let ipa = '';
-    if (doIPA) {
+    if (doIPA && rawWord.trim().split(/\s+/).length === 1) {
       ipa = await fetchIPA(rawWord);
     }
     onAddWord?.({
       word: rawWord,
       translation,
-      category: 'noun',
+      category: rawWord.trim().split(/\s+/).length > 1 ? 'expression' : 'noun',
       difficulty: 'easy',
       ipa,
       mnemonic: '',
@@ -144,6 +147,40 @@ export default function Reader({ words = [], onAddWord, speak }) {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+  useEffect(() => {
+    // for hash-based routing, extract ?text=... from window.location.hash
+    const hash = window.location.hash; // e.g. "#/reader?text=hello"
+    const queryString = hash.split('?')[1];
+    const params = new URLSearchParams(queryString);
+    const textParam = params.get('text');
+    if (textParam) {
+      setText(textParam);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleMouseUp = () => {
+      const selection = window.getSelection();
+      const text = selection?.toString().trim();
+      if (text?.split(/\s+/).length > 1) {
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+
+        // ensure rect is visible
+        if (rect.width > 0 && rect.height > 0) {
+          setSelectedText(text);
+          setPopRect(rect);
+          setPopWord(null);
+        }
+      } else {
+        setSelectedText('');
+      }
+    };
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => document.removeEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  const popoverWord = popWord || selectedText;
 
   return (
     <section style={{ ...styles.card, position: 'relative' }}>
@@ -225,7 +262,7 @@ export default function Reader({ words = [], onAddWord, speak }) {
             </button>
             <button
               style={styles.ghost}
-              oonClick={() => {
+              onClick={() => {
                 // all unique word tokens in the text
                 const unique = Array.from(
                   new Set(tokens.filter((t) => t.type === 'word').map((t) => t.key)),
@@ -323,36 +360,41 @@ export default function Reader({ words = [], onAddWord, speak }) {
       )}
 
       {/* Popover */}
-      {popWord && (
-        <WordPopoverPortal>
-          <WordPopover
-            anchorRect={popRect}
-            word={popWord}
-            ipa={findDeckInfo(words, popWord)?.ipa}
-            translation={findDeckInfo(words, popWord)?.translation}
-            status={statuses[popWord] || 'unknown'}
-            onSetStatus={(newStatus) => {
-              const key = popWord;
-              const prevStatus = statuses[key] || 'unknown';
+      {popoverWord && (
+        <>
+          {console.log('[Reader] Showing popover for:', popoverWord)}
+          <WordPopoverPortal>
+            <WordPopover
+              anchorRect={popRect}
+              word={popoverWord}
+              ipa={findDeckInfo(words, popoverWord)?.ipa}
+              translation={findDeckInfo(words, popoverWord)?.translation}
+              status={statuses[popoverWord] || 'unknown'}
+              onSetStatus={(newStatus) => {
+                const key = popoverWord;
+                const prevStatus = statuses[key] || 'unknown';
 
-              // update store + state
-              const next = setStatus(key, newStatus);
-              setStatuses(next);
+                // update store + state
+                const next = setStatus(key, newStatus);
+                setStatuses(next);
 
-              // event: only when entering "learning"
-              if (newStatus === 'learning' && prevStatus !== 'learning') {
-                bus.dispatchEvent(new CustomEvent('lingq-created', { detail: { lemma: key } }));
+                // event: only when entering "learning"
+                if (newStatus === 'learning' && prevStatus !== 'learning') {
+                  bus.dispatchEvent(new CustomEvent('lingq-created', { detail: { lemma: key } }));
+                }
+              }}
+              onAdd={() => addToDeck(popoverWord, { doTranslate: false, doIPA: false })}
+              onAddTranslate={() => addToDeck(popoverWord, { doTranslate: true, doIPA: false })}
+              onAddIPA={() =>
+                addToDeck(popoverWord, { doTranslate: autoTranslateEnabled, doIPA: true })
               }
-            }}
-            onAdd={() => addToDeck(popWord, { doTranslate: false, doIPA: false })}
-            onAddTranslate={() => addToDeck(popWord, { doTranslate: true, doIPA: false })}
-            onAddIPA={() => addToDeck(popWord, { doTranslate: autoTranslateEnabled, doIPA: true })}
-            autoTranslateEnabled={autoTranslateEnabled}
-            targetLang={targetLang}
-            onClose={clearPopover}
-            speak={speak}
-          />
-        </WordPopoverPortal>
+              autoTranslateEnabled={autoTranslateEnabled}
+              targetLang={targetLang}
+              onClose={clearPopover}
+              speak={speak}
+            />
+          </WordPopoverPortal>
+        </>
       )}
     </section>
   );
